@@ -14,15 +14,9 @@ contract RAI20 is ERC20 {
     string private _symbol;
 
     constructor() ERC20("", "") {
-        (
-            _name,
-            _symbol,
-            originalChain,
-            originalChainId,
-            originalContract,
-            _decimals,
-            coreContract
-        ) = RAI20Factory(_msgSender()).parameters();
+        (_name, _symbol, originalChain, originalChainId, originalContract, _decimals, coreContract) = RAI20Factory(
+            _msgSender()
+        ).parameters();
     }
 
     modifier onlyCoreContract() {
@@ -103,33 +97,26 @@ contract RAI20Factory {
             decimals: decimals,
             coreContract: coreContract
         });
-        addr = address(
-            new RAI20{salt: calcSalt(originalChainId, originalContract)}()
-        );
+        addr = address(new RAI20{salt: calcSalt(originalChainId, originalContract)}());
         require(addr != address(0), "RAI20Factory: create token failed");
         delete parameters;
         emit TokenCreated(addr);
         return addr;
     }
 
-    function calcSalt(uint32 originalChainId, address originalContract)
-        public
-        pure
-        returns (bytes32)
-    {
+    function calcSalt(uint32 originalChainId, address originalContract) public pure returns (bytes32) {
         return keccak256(abi.encode(originalChainId, originalContract));
     }
 }
 
 contract FactoryHelper {
-    bytes32 public immutable TOKEN_INIT_CODE_HASH =
-        keccak256(abi.encodePacked(type(RAI20).creationCode));
+    bytes32 public immutable TOKEN_INIT_CODE_HASH = keccak256(abi.encodePacked(type(RAI20).creationCode));
 
-    function calcAddress(address factory, uint32 originalChainId, address originalContract)
-        public
-        view
-        returns (address)
-    {
+    function calcAddress(
+        address factory,
+        uint32 originalChainId,
+        address originalContract
+    ) public view returns (address) {
         return
             address(
                 uint160(
@@ -138,12 +125,7 @@ contract FactoryHelper {
                             abi.encodePacked(
                                 hex"ff",
                                 factory,
-                                keccak256(
-                                    abi.encode(
-                                        originalChainId,
-                                        originalContract
-                                    )
-                                ),
+                                keccak256(abi.encode(originalChainId, originalContract)),
                                 TOKEN_INIT_CODE_HASH
                             )
                         )
