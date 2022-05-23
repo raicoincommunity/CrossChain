@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.4;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 
-contract RAI20 is ERC20 {
-    uint8 private immutable _decimals;
+contract RAI721 is ERC721, ERC721Enumerable {
     uint32 public immutable originalChainId;
     address public immutable originalContract;
     address public immutable coreContract;
@@ -13,10 +13,9 @@ contract RAI20 is ERC20 {
     string private _name;
     string private _symbol;
 
-    constructor() ERC20("", "") {
-        (_name, _symbol, originalChain, originalChainId, originalContract, _decimals, coreContract) = RAI20Factory(
-            _msgSender()
-        ).parameters();
+    constructor() ERC721("", "") {
+        (_name, _symbol, originalChain, originalChainId, originalContract, coreContract) = RAI721Factory(_msgSender())
+            .parameters();
     }
 
     modifier onlyCoreContract() {
@@ -32,20 +31,30 @@ contract RAI20 is ERC20 {
         return _symbol;
     }
 
-    function decimals() public view virtual override returns (uint8) {
-        return _decimals;
+    function mint(address to, uint256 tokenId) external onlyCoreContract {
+        _safeMint(to, tokenId);
     }
 
-    function mint(address to, uint256 amount) external onlyCoreContract {
-        _mint(to, amount);
+    function burn(uint256 tokenId) external onlyCoreContract {
+        require(ownerOf(tokenId) == _msgSender(), "Not owned");
+        _burn(tokenId);
     }
 
-    function burn(uint256 amount) external onlyCoreContract {
-        _burn(_msgSender(), amount);
+    // The following functions are overrides required by Solidity.
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 tokenId
+    ) internal override(ERC721, ERC721Enumerable) {
+        super._beforeTokenTransfer(from, to, tokenId);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721Enumerable) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }
 
-contract RAI20Factory {
+contract RAI721Factory {
     address public immutable deployer;
     address public coreContract;
 
@@ -73,7 +82,6 @@ contract RAI20Factory {
         string originalChain;
         uint32 originalChainId;
         address originalContract;
-        uint8 decimals;
         address coreContract;
     }
     Parameters public parameters;
@@ -85,8 +93,7 @@ contract RAI20Factory {
         string memory symbol,
         string memory originalChain,
         uint32 originalChainId,
-        address originalContract,
-        uint8 decimals
+        address originalContract
     ) public onlyCoreContract returns (address addr) {
         parameters = Parameters({
             name: name,
@@ -94,10 +101,9 @@ contract RAI20Factory {
             originalChain: originalChain,
             originalChainId: originalChainId,
             originalContract: originalContract,
-            decimals: decimals,
             coreContract: coreContract
         });
-        addr = address(new RAI20{salt: calcSalt(originalChainId, originalContract)}());
+        addr = address(new RAI721{salt: calcSalt(originalChainId, originalContract)}());
         require(addr != address(0), "Create token failed");
         delete parameters;
         emit TokenCreated(addr);
@@ -111,7 +117,7 @@ contract RAI20Factory {
 
 contract FactoryHelper {
     //solhint-disable-next-line var-name-mixedcase
-    bytes32 public immutable TOKEN_INIT_CODE_HASH = keccak256(abi.encodePacked(type(RAI20).creationCode));
+    bytes32 public immutable TOKEN_INIT_CODE_HASH = keccak256(abi.encodePacked(type(RAI721).creationCode));
 
     function calcAddress(
         address factory,

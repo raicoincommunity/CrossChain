@@ -19,7 +19,6 @@ describe("RAI20Factory", function () {
     const factory = await ethers.getContractFactory("RAI20Factory");
     factoryInstance = await factory.deploy();
   }
-
  
   describe("Deployment", function () {
     before(deploy);
