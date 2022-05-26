@@ -14,8 +14,14 @@ contract RAI721 is ERC721, ERC721Enumerable {
     string private _symbol;
 
     constructor() ERC721("", "") {
-        (_name, _symbol, originalChain, originalChainId, originalContract, coreContract) = RAI721Factory(_msgSender())
-            .parameters();
+        (
+            _name,
+            _symbol,
+            originalChain,
+            originalChainId,
+            originalContract,
+            coreContract
+        ) = RAI721Factory(_msgSender()).parameters();
     }
 
     modifier onlyCoreContract() {
@@ -49,7 +55,12 @@ contract RAI721 is ERC721, ERC721Enumerable {
         super._beforeTokenTransfer(from, to, tokenId);
     }
 
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721Enumerable) returns (bool) {
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, ERC721Enumerable)
+        returns (bool)
+    {
         return super.supportsInterface(interfaceId);
     }
 }
@@ -110,14 +121,19 @@ contract RAI721Factory {
         return addr;
     }
 
-    function calcSalt(uint32 originalChainId, address originalContract) public pure returns (bytes32) {
+    function calcSalt(uint32 originalChainId, address originalContract)
+        public
+        pure
+        returns (bytes32)
+    {
         return keccak256(abi.encode(originalChainId, originalContract));
     }
 }
 
 contract FactoryHelper {
     //solhint-disable-next-line var-name-mixedcase
-    bytes32 public immutable TOKEN_INIT_CODE_HASH = keccak256(abi.encodePacked(type(RAI721).creationCode));
+    bytes32 public immutable TOKEN_INIT_CODE_HASH =
+        keccak256(abi.encodePacked(type(RAI721).creationCode));
 
     function calcAddress(
         address factory,
