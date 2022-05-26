@@ -14,9 +14,15 @@ contract RAI20 is ERC20 {
     string private _symbol;
 
     constructor() ERC20("", "") {
-        (_name, _symbol, originalChain, originalChainId, originalContract, _decimals, coreContract) = RAI20Factory(
-            _msgSender()
-        ).parameters();
+        (
+            _name,
+            _symbol,
+            originalChain,
+            originalChainId,
+            originalContract,
+            _decimals,
+            coreContract
+        ) = RAI20Factory(_msgSender()).parameters();
     }
 
     modifier onlyCoreContract() {
@@ -104,14 +110,19 @@ contract RAI20Factory {
         return addr;
     }
 
-    function calcSalt(uint32 originalChainId, address originalContract) public pure returns (bytes32) {
+    function calcSalt(uint32 originalChainId, address originalContract)
+        public
+        pure
+        returns (bytes32)
+    {
         return keccak256(abi.encode(originalChainId, originalContract));
     }
 }
 
 contract FactoryHelper {
     //solhint-disable-next-line var-name-mixedcase
-    bytes32 public immutable TOKEN_INIT_CODE_HASH = keccak256(abi.encodePacked(type(RAI20).creationCode));
+    bytes32 public immutable TOKEN_INIT_CODE_HASH =
+        keccak256(abi.encodePacked(type(RAI20).creationCode));
 
     function calcAddress(
         address factory,
