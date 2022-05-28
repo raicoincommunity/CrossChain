@@ -70,7 +70,8 @@ abstract contract CustomEIP712Upgradeable is Initializable {
         bytes32 nameHash,
         bytes32 versionHash
     ) private view returns (bytes32) {
-        return keccak256(abi.encode(typeHash, nameHash, versionHash, block.chainid, address(this)));
+        return
+            keccak256(abi.encode(typeHash, nameHash, versionHash, block.chainid, address(this)));
     }
 
     /**
