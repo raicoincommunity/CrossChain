@@ -5,11 +5,11 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 
 contract RAI721 is ERC721, ERC721Enumerable {
-    uint32 public immutable originalChainId;
-    address public immutable originalContract;
-    address public immutable coreContract;
+    uint32 private immutable _originalChainId;
+    bytes32 private immutable _originalContract;
+    address private immutable _coreContract;
 
-    string public originalChain;
+    string private _originalChain;
     string private _name;
     string private _symbol;
 
@@ -17,24 +17,16 @@ contract RAI721 is ERC721, ERC721Enumerable {
         (
             _name,
             _symbol,
-            originalChain,
-            originalChainId,
-            originalContract,
-            coreContract
+            _originalChain,
+            _originalChainId,
+            _originalContract,
+            _coreContract
         ) = RAI721Factory(_msgSender()).parameters();
     }
 
     modifier onlyCoreContract() {
-        require(coreContract == _msgSender(), "Not from core");
+        require(_coreContract == _msgSender(), "Not from core");
         _;
-    }
-
-    function name() public view virtual override returns (string memory) {
-        return _name;
-    }
-
-    function symbol() public view virtual override returns (string memory) {
-        return _symbol;
     }
 
     function mint(address to, uint256 tokenId) external onlyCoreContract {
@@ -44,6 +36,30 @@ contract RAI721 is ERC721, ERC721Enumerable {
     function burn(uint256 tokenId) external onlyCoreContract {
         require(ownerOf(tokenId) == _msgSender(), "Not owned");
         _burn(tokenId);
+    }
+
+    function originalChain() external view returns (string memory) {
+        return _originalChain;
+    }
+
+    function originalChainId() external view returns (uint32) {
+        return _originalChainId;
+    }
+
+    function originalContract() external view returns (bytes32) {
+        return _originalContract;
+    }
+
+    function coreContract() external view returns (address) {
+        return _coreContract;
+    }
+
+    function name() public view virtual override returns (string memory) {
+        return _name;
+    }
+
+    function symbol() public view virtual override returns (string memory) {
+        return _symbol;
     }
 
     // The following functions are overrides required by Solidity.
@@ -92,7 +108,7 @@ contract RAI721Factory {
         string symbol;
         string originalChain;
         uint32 originalChainId;
-        address originalContract;
+        bytes32 originalContract;
         address coreContract;
     }
     Parameters public parameters;
@@ -100,12 +116,12 @@ contract RAI721Factory {
     event TokenCreated(address);
 
     function create(
-        string memory name,
-        string memory symbol,
-        string memory originalChain,
+        string calldata name,
+        string calldata symbol,
+        string calldata originalChain,
         uint32 originalChainId,
-        address originalContract
-    ) public onlyCoreContract returns (address addr) {
+        bytes32 originalContract
+    ) external onlyCoreContract returns (address addr) {
         parameters = Parameters({
             name: name,
             symbol: symbol,
@@ -121,7 +137,7 @@ contract RAI721Factory {
         return addr;
     }
 
-    function calcSalt(uint32 originalChainId, address originalContract)
+    function calcSalt(uint32 originalChainId, bytes32 originalContract)
         public
         pure
         returns (bytes32)
@@ -138,7 +154,7 @@ contract FactoryHelper {
     function calcAddress(
         address factory,
         uint32 originalChainId,
-        address originalContract
+        bytes32 originalContract
     ) public view returns (address) {
         return
             address(

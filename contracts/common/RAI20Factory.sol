@@ -5,11 +5,11 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract RAI20 is ERC20 {
     uint8 private immutable _decimals;
-    uint32 public immutable originalChainId;
-    address public immutable originalContract;
-    address public immutable coreContract;
+    uint32 private immutable _originalChainId;
+    bytes32 private immutable _originalContract;
+    address private immutable _coreContract;
 
-    string public originalChain;
+    string private _originalChain;
     string private _name;
     string private _symbol;
 
@@ -17,17 +17,41 @@ contract RAI20 is ERC20 {
         (
             _name,
             _symbol,
-            originalChain,
-            originalChainId,
-            originalContract,
+            _originalChain,
+            _originalChainId,
+            _originalContract,
             _decimals,
-            coreContract
+            _coreContract
         ) = RAI20Factory(_msgSender()).parameters();
     }
 
     modifier onlyCoreContract() {
-        require(coreContract == _msgSender(), "Not from core");
+        require(_coreContract == _msgSender(), "Not from core");
         _;
+    }
+
+    function mint(address to, uint256 amount) external onlyCoreContract {
+        _mint(to, amount);
+    }
+
+    function burn(uint256 amount) external onlyCoreContract {
+        _burn(_msgSender(), amount);
+    }
+
+    function originalChain() external view returns (string memory) {
+        return _originalChain;
+    }
+
+    function originalChainId() external view returns (uint32) {
+        return _originalChainId;
+    }
+
+    function originalContract() external view returns (bytes32) {
+        return _originalContract;
+    }
+
+    function coreContract() external view returns (address) {
+        return _coreContract;
     }
 
     function name() public view virtual override returns (string memory) {
@@ -40,14 +64,6 @@ contract RAI20 is ERC20 {
 
     function decimals() public view virtual override returns (uint8) {
         return _decimals;
-    }
-
-    function mint(address to, uint256 amount) external onlyCoreContract {
-        _mint(to, amount);
-    }
-
-    function burn(uint256 amount) external onlyCoreContract {
-        _burn(_msgSender(), amount);
     }
 }
 
@@ -78,7 +94,7 @@ contract RAI20Factory {
         string symbol;
         string originalChain;
         uint32 originalChainId;
-        address originalContract;
+        bytes32 originalContract;
         uint8 decimals;
         address coreContract;
     }
@@ -87,13 +103,13 @@ contract RAI20Factory {
     event TokenCreated(address);
 
     function create(
-        string memory name,
-        string memory symbol,
-        string memory originalChain,
+        string calldata name,
+        string calldata symbol,
+        string calldata originalChain,
         uint32 originalChainId,
-        address originalContract,
+        bytes32 originalContract,
         uint8 decimals
-    ) public onlyCoreContract returns (address addr) {
+    ) external onlyCoreContract returns (address addr) {
         parameters = Parameters({
             name: name,
             symbol: symbol,
@@ -110,7 +126,7 @@ contract RAI20Factory {
         return addr;
     }
 
-    function calcSalt(uint32 originalChainId, address originalContract)
+    function calcSalt(uint32 originalChainId, bytes32 originalContract)
         public
         pure
         returns (bytes32)
@@ -127,7 +143,7 @@ contract FactoryHelper {
     function calcAddress(
         address factory,
         uint32 originalChainId,
-        address originalContract
+        bytes32 originalContract
     ) public view returns (address) {
         return
             address(
