@@ -6,7 +6,7 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "./CustomEIP712Upgradeable.sol";
 import "./NonceManager.sol";
-import "./ValidatorManager.sol";
+import "./Verifier.sol";
 
 contract CustomPausable is
     Initializable,
@@ -14,7 +14,7 @@ contract CustomPausable is
     PausableUpgradeable,
     CustomEIP712Upgradeable,
     NonceManager,
-    ValidatorManager
+    Verifier
 {
     bytes32 private constant _PAUSE_TYPEHASH = keccak256("Pause(uint256 nonce)");
     bytes32 private constant _UNPAUSE_TYPEHASH = keccak256("Unpause(uint256 nonce)");
