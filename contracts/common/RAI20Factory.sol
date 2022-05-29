@@ -2,6 +2,7 @@
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "./Component.sol";
 
 contract RAI20 is ERC20 {
     uint8 private immutable _decimals;
@@ -14,15 +15,14 @@ contract RAI20 is ERC20 {
     string private _symbol;
 
     constructor() ERC20("", "") {
-        (
-            _name,
-            _symbol,
-            _originalChain,
-            _originalChainId,
-            _originalContract,
-            _decimals,
-            _coreContract
-        ) = RAI20Factory(_msgSender()).parameters();
+        RAI20Factory.Parameters memory p = RAI20Factory(_msgSender()).parameters();
+        _name = p.name;
+        _symbol = p.symbol;
+        _originalChain = p.originalChain;
+        _originalChainId = p.originalChainId;
+        _originalContract = p.originalContract;
+        _coreContract = p.coreContract;
+        _decimals = p.decimals;
     }
 
     modifier onlyCoreContract() {
@@ -67,28 +67,7 @@ contract RAI20 is ERC20 {
     }
 }
 
-contract RAI20Factory {
-    address public immutable deployer;
-    address public coreContract;
-
-    modifier onlyCoreContract() {
-        require(msg.sender == coreContract, "Not core contract");
-        _;
-    }
-
-    constructor() {
-        deployer = msg.sender;
-    }
-
-    event CoreContractSet(address);
-
-    function setCoreContract(address core) external {
-        require(msg.sender == deployer, "Not deployer");
-        require(coreContract == address(0), "Already set");
-        coreContract = core;
-        emit CoreContractSet(coreContract);
-    }
-
+contract RAI20Factory is Component {
     struct Parameters {
         string name;
         string symbol;
@@ -98,7 +77,8 @@ contract RAI20Factory {
         uint8 decimals;
         address coreContract;
     }
-    Parameters public parameters;
+
+    Parameters private _parameters;
 
     event TokenCreated(address);
 
@@ -110,20 +90,24 @@ contract RAI20Factory {
         bytes32 originalContract,
         uint8 decimals
     ) external onlyCoreContract returns (address addr) {
-        parameters = Parameters({
+        _parameters = Parameters({
             name: name,
             symbol: symbol,
             originalChain: originalChain,
             originalChainId: originalChainId,
             originalContract: originalContract,
             decimals: decimals,
-            coreContract: coreContract
+            coreContract: coreContract()
         });
         addr = address(new RAI20{salt: calcSalt(originalChainId, originalContract)}());
-        require(addr != address(0), "Create token failed");
-        delete parameters;
+        require(addr != address(0), "create token failed");
+        delete _parameters;
         emit TokenCreated(addr);
         return addr;
+    }
+
+    function parameters() external view returns (Parameters memory) {
+        return _parameters;
     }
 
     function calcSalt(uint32 originalChainId, bytes32 originalContract)

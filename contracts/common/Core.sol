@@ -12,10 +12,11 @@ import "@openzeppelin/contracts-upgradeable/token/ERC721/utils/ERC721HolderUpgra
 import "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165CheckerUpgradeable.sol";
 import "./CustomEIP712Upgradeable.sol";
 import "./NonceManager.sol";
-import "./ValidatorManager.sol";
+import "./Verifier.sol";
 import "./CustomPauseable.sol";
 import "./IRAI20Factory.sol";
 import "./IRAI721Factory.sol";
+import "./IValidatorManager.sol";
 
 interface IDecimals {
     function decimals() external view returns (uint8);
@@ -29,7 +30,7 @@ abstract contract Core is
     ERC721HolderUpgradeable,
     CustomEIP712Upgradeable,
     NonceManager,
-    ValidatorManager,
+    Verifier,
     CustomPausable
 {
     /*=========================== 1. STRUCTS =================================*/
@@ -232,8 +233,7 @@ abstract contract Core is
     }
 
     function __Core_init(
-        bytes32 genesisValidator,
-        address genesisSigner,
+        IValidatorManager validatorManager,
         IRAI20Factory rai20Factory,
         IRAI721Factory rai721Factory
     ) internal onlyInitializing {
@@ -243,7 +243,7 @@ abstract contract Core is
         __UUPSUpgradeable_init();
         __ERC721Holder_init();
         __EIP712_init();
-        __ValidatorManager_init(genesisValidator, genesisSigner);
+        __Verifier_init(validatorManager);
         __Core_init_unchained(rai20Factory, rai721Factory);
     }
 
@@ -626,6 +626,7 @@ abstract contract Core is
             );
             require(verify(structHash, signatures), "verify");
         }
+        require(originalChainId != normalizedChainId(), "chainId");
         require(sender != bytes32(0), "sender");
         require(recipient != address(0) && recipient != address(this), "recipient");
         require(amount > 0, "amount");
@@ -677,6 +678,7 @@ abstract contract Core is
             );
             require(verify(structHash, signatures), "verify");
         }
+        require(originalChainId != normalizedChainId(), "chainId");
         require(sender != bytes32(0), "sender");
         require(recipient != address(0) && recipient != address(this), "recipient");
 

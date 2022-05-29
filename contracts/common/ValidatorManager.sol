@@ -6,13 +6,17 @@ import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "./CustomEIP712Upgradeable.sol";
 import "./NonceManager.sol";
+import "./Component.sol";
+import "./IVerifier.sol";
+
 
 contract ValidatorManager is
     Initializable,
     ReentrancyGuardUpgradeable,
     PausableUpgradeable,
     CustomEIP712Upgradeable,
-    NonceManager
+    NonceManager,
+    Component
 {
     /*=========================== 1. STRUCTS =================================*/
     struct ValidatorInfo {
@@ -27,6 +31,7 @@ contract ValidatorManager is
     uint256 private constant _CONFIRM_PERCENT = 51;
     uint256 private constant _EPOCH_TIME = 72 * 3600; // 72 hours
     uint256 private constant _REWARD_TIME = 71 * 3600; // reward: 0 ~ 71 hour, purge: 71 ~ 72 hour
+    uint256 private constant _REWARD_FACTOR = 1e9;
     bytes32 private constant _SUBMIT_VALIDATOR_TYPEHASH =
         keccak256("SubmitValidator(bytes32 validator,address signer,uint256 weight,uint32 epoch)");
     bytes32 private constant _SET_FEE_RATE_TYPEHASH =
@@ -37,7 +42,6 @@ contract ValidatorManager is
     bytes32 private _genesisValidator;
     uint256 private _totalWeight;
     uint256 private _weightedGasPrice;
-    uint256 private _feeInPool;
     uint256 private _feeRate; // gas as unit
 
     // Mapping from signer's address to election _weightedGasPrice
@@ -65,24 +69,12 @@ contract ValidatorManager is
         uint256 weight,
         uint32 epoch
     );
-    event RewardSent(address indexed to, uint256 amount);
-    event FeeCharged(address indexed sender, uint256 fee);
     event WeightedGasPriceUpdated(uint256 previousPrice, uint256 newPrice);
     event TotalWeightUpdated(uint256 previousWeight, uint256 newWeight);
 
     /*=========================== 5. MODIFIERS ===============================*/
     modifier onlySigner(address signer) {
         require(msg.sender == signer && tx.origin == signer, "Not from signer");
-        _;
-    }
-
-    modifier chargeFee(uint256 fee) {
-        uint256 minFee = _feeRate * _weightedGasPrice;
-        require(msg.value >= fee && fee >= minFee, "fee");
-        if (fee > 0) {
-            _feeInPool += fee;
-            emit FeeCharged(msg.sender, fee);
-        }
         _;
     }
 
@@ -108,13 +100,14 @@ contract ValidatorManager is
         uint256 feeRate,
         uint256 nonce,
         bytes calldata signatures
-    ) external nonReentrant whenNotPaused useNonce(nonce) {
+    ) external nonReentrant whenNotPaused useNonce(nonce) coreContractValid {
         require(
             verify(keccak256(abi.encode(_SET_FEE_RATE_TYPEHASH, feeRate, nonce)), signatures),
             "verify"
         );
         _feeRate = feeRate;
         emit FeeRateUpdated(feeRate, nonce);
+        IVerifier(coreContract()).setFee(feeRate * _weightedGasPrice);
     }
 
     function submitValidator(
@@ -124,7 +117,7 @@ contract ValidatorManager is
         uint32 epoch,
         address rewardTo,
         bytes calldata signatures
-    ) external nonReentrant whenNotPaused onlySigner(signer) {
+    ) external nonReentrant whenNotPaused onlySigner(signer) coreContractValid {
         {
             // Statck too deep
             bytes32 structHash = keccak256(
@@ -138,9 +131,10 @@ contract ValidatorManager is
         ValidatorInfo memory info = _validatorInfos[validator];
         require(epoch >= info.epoch && epoch == _getCurrentEpoch(), "epoch");
 
-        uint256 reward = _revokeSubmission(validator, info, false);
+        uint256 totalWeight = _totalWeight;
+        uint256 weightClear = _revokeSubmission(validator, info, false);
         if (!_inRewardTimeRange(info) || info.epoch == epoch) {
-            reward = 0;
+            weightClear = 0;
         }
 
         require(_signerToValidator[signer] == bytes32(0), "signer");
@@ -156,8 +150,8 @@ contract ValidatorManager is
         info.epoch = epoch;
         _doSubmission(validator, info, weight);
 
-        if (reward > 0 && rewardTo != address(0)) {
-            _sendReward(rewardTo, reward);
+        if (weightClear > 0 && rewardTo != address(0)) {
+            _sendReward(rewardTo, weight, totalWeight);
         }
     }
 
@@ -165,19 +159,21 @@ contract ValidatorManager is
         external
         nonReentrant
         whenNotPaused
+        coreContractValid
     {
         require(_inPurgeTimeRange(), "time");
-        uint256 reward = 0;
+        uint256 totalWeight = _totalWeight;
+        uint256 weight = 0;
         for (uint256 i = 0; i < validators.length; i++) {
             bytes32 validator = validators[i];
             ValidatorInfo memory info = _validatorInfos[validator];
             if (_canPurge(info)) {
-                reward += _revokeSubmission(validator, info, true);
+                weight += _revokeSubmission(validator, info, true);
             }
         }
 
-        if (reward > 0 && rewardTo != address(0)) {
-            _sendReward(rewardTo, reward);
+        if (weight > 0 && rewardTo != address(0)) {
+            _sendReward(rewardTo, weight, totalWeight);
         }
     }
 
@@ -187,10 +183,6 @@ contract ValidatorManager is
 
     function getFeeRate() external view returns (uint256) {
         return _feeRate;
-    }
-
-    function getFeeInPool() external view returns (uint256) {
-        return _feeInPool;
     }
 
     function getWeightedGasPrice() external view returns (uint256) {
@@ -215,10 +207,10 @@ contract ValidatorManager is
 
     function verify(bytes32 structHash, bytes calldata signatures) public view returns (bool) {
         bytes32 typedHash = _hashTypedDataV4(structHash);
-        return _verify(typedHash, signatures);
+        return verifyTypedData(typedHash, signatures);
     }
 
-    function _verify(bytes32 msgHash, bytes calldata signatures) internal view returns (bool) {
+    function verifyTypedData(bytes32 typedHash, bytes calldata signatures) public view returns (bool) {
         uint256 length = signatures.length;
         require(length > 0 && length % 65 == 0, "signatures");
         uint256 count = length / 65;
@@ -237,7 +229,7 @@ contract ValidatorManager is
 
         for (i = 0; i < count; ++i) {
             (r, s, v) = _decodeSignature(signatures, i);
-            current = ecrecover(msgHash, v, r, s);
+            current = ecrecover(typedHash, v, r, s);
             require(current > last, "signer order");
             last = current;
             weight += _getWeight(current, genesis, total);
@@ -328,7 +320,7 @@ contract ValidatorManager is
         bytes32 validator,
         ValidatorInfo memory info,
         bool store
-    ) private returns (uint256 reward) {
+    ) private returns (uint256) {
         address signer = info.signer;
         if (signer == address(0)) {
             return 0;
@@ -336,12 +328,6 @@ contract ValidatorManager is
         _signerToValidator[signer] = bytes32(0);
         uint256 weight = _weights[signer];
         _weights[signer] = 0;
-        if (weight > 0) {
-            uint256 total = _totalWeight;
-            if (total > 0) {
-                reward = (weight * _feeInPool) / total;
-            }
-        }
         _decreaseTotalWeightAndUpdateGasPrice(weight, info.gasPrice);
 
         info.gasPrice = 0;
@@ -350,21 +336,18 @@ contract ValidatorManager is
             _validatorInfos[validator] = info;
             emit ValidatorPurged(validator, signer, weight, info.epoch);
         }
+        return weight;
     }
 
-    function _sendReward(address to, uint256 amount) private {
-        uint256 fee = _feeInPool;
-        if (amount > fee) {
-            amount = fee;
-        }
-        if (amount == 0) {
+    function _sendReward(address to, uint256 weight, uint256 totalWeight) private {
+        if (weight == 0) {
             return;
         }
-        _feeInPool = fee - amount;
-        (bool success, ) = to.call{value: amount}("");
-        require(success, "reward");
-
-        emit RewardSent(to, amount);
+        uint256 share = _REWARD_FACTOR;
+        if (weight < totalWeight) {
+            share = _REWARD_FACTOR * weight / totalWeight;
+        }
+        IVerifier(coreContract()).sendReward(to, share);
     }
 
     function _increaseTotalWeightAndUpdateGasPrice(uint256 weight, uint256 gasPrice) private {
@@ -379,8 +362,7 @@ contract ValidatorManager is
 
         uint256 currentPrice = _weightedGasPrice;
         uint256 newPrice = ((currentPrice * currentWeight) + (weight * gasPrice)) / newWeight;
-        _weightedGasPrice = newPrice;
-        emit WeightedGasPriceUpdated(currentPrice, newPrice);
+        _updateWeightedGasPrice(newPrice);
     }
 
     function _decreaseTotalWeightAndUpdateGasPrice(uint256 weight, uint256 gasPrice) private {
@@ -389,13 +371,10 @@ contract ValidatorManager is
         }
 
         uint256 currentWeight = _totalWeight;
-        uint256 currentPrice = _weightedGasPrice;
-
         if (weight >= currentWeight) {
             _totalWeight = 0;
             emit TotalWeightUpdated(currentWeight, 0);
-            _weightedGasPrice = 0;
-            emit WeightedGasPriceUpdated(currentPrice, 0);
+            _updateWeightedGasPrice(0);
             return;
         }
 
@@ -403,15 +382,27 @@ contract ValidatorManager is
         _totalWeight = newWeight;
         emit TotalWeightUpdated(currentWeight, newWeight);
 
+        uint256 currentPrice = _weightedGasPrice;
         uint256 removalPrice = (gasPrice * weight) / currentWeight;
         if (removalPrice >= currentPrice) {
-            _weightedGasPrice = 0;
-            emit WeightedGasPriceUpdated(currentPrice, 0);
+            _updateWeightedGasPrice(0);
             return;
         }
 
         uint256 newPrice = ((currentPrice - removalPrice) * currentWeight) / newWeight;
-        _weightedGasPrice = newPrice;
-        emit WeightedGasPriceUpdated(currentPrice, newPrice);
+        _updateWeightedGasPrice(newPrice);
     }
+
+    function _updateWeightedGasPrice(uint256 price) private {
+        uint256 currentPrice = _weightedGasPrice;
+        if (currentPrice == price) {
+            return;
+        }
+
+        _weightedGasPrice = price;
+        emit WeightedGasPriceUpdated(currentPrice, price);
+        IVerifier(coreContract()).setFee(_feeRate * price);
+    }
+
 }
+
