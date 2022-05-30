@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "./Component.sol";
+import "./errors.sol";
 
 contract RAI721 is ERC721, ERC721Enumerable {
     uint32 private immutable _originalChainId;
@@ -25,7 +26,7 @@ contract RAI721 is ERC721, ERC721Enumerable {
     }
 
     modifier onlyCoreContract() {
-        require(_coreContract == _msgSender(), "Not from core");
+        if (_msgSender() != _coreContract) revert NotCalledByCoreContract();
         _;
     }
 
@@ -34,7 +35,7 @@ contract RAI721 is ERC721, ERC721Enumerable {
     }
 
     function burn(uint256 tokenId) external onlyCoreContract {
-        require(ownerOf(tokenId) == _msgSender(), "Not owned");
+        if (ownerOf(tokenId) != _msgSender()) revert TokenIdNotOwned();
         _burn(tokenId);
     }
 
@@ -111,13 +112,13 @@ contract RAI721Factory is Component {
             coreContract: coreContract()
         });
         addr = address(new RAI721{salt: calcSalt(originalChainId, originalContract)}());
-        require(addr != address(0), "Create token failed");
+        if (addr == address(0)) revert CreateWrappedTokenFailed();
         delete _parameters;
         emit TokenCreated(addr);
         return addr;
     }
 
-    function parameters () external view returns (Parameters memory) {
+    function parameters() external view returns (Parameters memory) {
         return _parameters;
     }
 

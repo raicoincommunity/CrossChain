@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.14;
+
+import "./errors.sol";
 
 abstract contract Component {
     address private immutable _deployer;
@@ -8,12 +10,12 @@ abstract contract Component {
     event CoreContractSet(address);
 
     modifier onlyCoreContract() {
-        require(msg.sender == _coreContract, "not from core");
+        if (msg.sender != _coreContract) revert NotCalledByCoreContract();
         _;
     }
 
     modifier coreContractValid() {
-        require(_coreContract != address(0), "core not set");
+        if (_coreContract == address(0)) revert CoreContractNotSet();
         _;
     }
 
@@ -22,14 +24,14 @@ abstract contract Component {
     }
 
     function setCoreContract(address core) external {
-        require(core != address(0), "invalid address");
-        require(msg.sender == _deployer, "not deployer");
-        require(_coreContract == address(0), "already set");
+        if (core == address(0)) revert InvalidCoreContract();
+        if (msg.sender != _deployer) revert NotCalledByDeployer();
+        if (_coreContract != address(0)) revert CoreContractAreadySet();
         _coreContract = core;
         emit CoreContractSet(_coreContract);
     }
 
-    function deployer () public view returns (address) {
+    function deployer() public view returns (address) {
         return _deployer;
     }
 

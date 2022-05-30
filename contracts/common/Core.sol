@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -17,6 +17,7 @@ import "./CustomPauseable.sol";
 import "./IRAI20Factory.sol";
 import "./IRAI721Factory.sol";
 import "./IValidatorManager.sol";
+import "./errors.sol";
 
 interface IDecimals {
     function decimals() external view returns (uint8);
@@ -91,9 +92,9 @@ abstract contract Core is
     mapping(IERC721Upgradeable => mapping(uint256 => uint256)) private _tokenIdReserve;
     // mapping unmap transaction hash to block height at which the unmap was executed
     // it is used to prevent double-spending of unmap transactions
-    mapping(bytes32 => uint256) _unmappedTxns;
+    mapping(bytes32 => uint256) private _unmappedTxns;
     // maping original (chain, token address) to wrapped token address
-    mapping(uint32 => mapping(bytes32 => address)) _wrappedTokens;
+    mapping(uint32 => mapping(bytes32 => address)) private _wrappedTokens;
 
     /*=========================== 4. EVENTS ==================================*/
     event NewImplementationSet(address newImplementation);
@@ -262,8 +263,8 @@ abstract contract Core is
         bytes calldata signatures
     ) external nonReentrant whenNotPaused useNonce(nonce) {
         bytes32 structHash = keccak256(abi.encode(_UPGRADE_TYPEHASH, impl, nonce));
-        require(verify(structHash, signatures), "verify");
-        require(impl != address(0) && impl != _getImplementation(), "impl");
+        if (!verify(structHash, signatures)) revert VerificationFailed();
+        if (impl == address(0) || impl == _getImplementation()) revert InvalidImplementation();
 
         _newImplementation = impl;
         emit NewImplementationSet(impl);
@@ -280,27 +281,28 @@ abstract contract Core is
         uint256 amount,
         bytes32 recipient
     ) external payable nonReentrant whenNotPaused chargeFee(msg.value) {
-        require(address(token) != address(0), "token");
-        require(amount > 0, "amount");
-        require(recipient != bytes32(0), "recipient");
+        if (address(token) == address(0)) revert InvalidTokenAddress();
+        if (amount <= 1) revert InvalidAmount();
+        if (recipient == bytes32(0)) revert InvalidRecipient();
 
         TokenInfo memory info = _tokenInfos[address(token)];
         if (!info.initialized) {
             _initERC20(info, token, false);
         }
-        require(info.tokenType == TokenType.ERC20, "type");
-        require(!info.wrapped, "wrapped");
+        if (info.tokenType != TokenType.ERC20) revert TokenTypeNotMatch();
+        if (info.wrapped) revert CanNotMapWrappedToken();
 
         uint256 balance = token.balanceOf(address(this));
         SafeERC20Upgradeable.safeTransferFrom(token, _msgSender(), address(this), amount);
         uint256 newBalance = token.balanceOf(address(this));
-        require(newBalance > balance + 1, "balance");
+        if (newBalance <= balance + 1) revert InvalidBalance();
 
         uint256 share = newBalance - balance;
         if (info.versatile || info.reserve < balance) {
             share = (share * info.reserve) / balance;
         }
-        require(share > 0, "share");
+        if (share == 0) revert InvalidShare();
+
         info.reserve += share;
         _tokenInfos[address(token)] = info;
         emit ERC20TokenMapped(
@@ -318,9 +320,9 @@ abstract contract Core is
         bytes32 recipient,
         uint256 fee
     ) external payable nonReentrant whenNotPaused chargeFee(fee) {
-        require(amount > 0, "amount");
-        require(recipient != bytes32(0), "recipient");
-        require(msg.value == amount + fee, "value");
+        if (amount == 0) revert InvalidAmount();
+        if (recipient == bytes32(0)) revert InvalidRecipient();
+        if (msg.value != (amount + fee)) revert InvalidValue();
 
         _ethReserve += amount;
         emit ETHMapped(_msgSender(), recipient, amount, normalizedChainId());
@@ -331,21 +333,21 @@ abstract contract Core is
         uint256 tokenId,
         bytes32 recipient
     ) external payable nonReentrant whenNotPaused chargeFee(msg.value) {
-        require(address(token) != address(0), "token");
-        require(_tokenIdReserve[token][tokenId] == 0, "reserved");
-        require(recipient != bytes32(0), "recipient");
-        require(block.number > 0, "block number");
+        if (address(token) == address(0)) revert InvalidTokenAddress();
+        if (_tokenIdReserve[token][tokenId] != 0) revert TokenIdAlreadyMapped();
+        if (recipient == bytes32(0)) revert InvalidRecipient();
+        if (block.number == 0) revert ZeroBlockNumber();
 
         TokenInfo memory info = _tokenInfos[address(token)];
         if (!info.initialized) {
             _initERC721(info, token, false);
         }
-        require(info.tokenType == TokenType.ERC721, "type");
-        require(!info.wrapped, "wrapped");
+        if (info.tokenType != TokenType.ERC721) revert TokenTypeNotMatch();
+        if (info.wrapped) revert CanNotMapWrappedToken();
 
-        require(token.ownerOf(tokenId) != address(this), "owner");
+        if (token.ownerOf(tokenId) == address(this)) revert TokenIdAlreadyOwned();
         token.safeTransferFrom(_msgSender(), address(this), tokenId);
-        require(token.ownerOf(tokenId) == address(this), "transfer");
+        if (token.ownerOf(tokenId) != address(this)) revert TransferFailed();
 
         _tokenIdReserve[token][tokenId] = block.number;
         info.reserve += 1;
@@ -380,28 +382,29 @@ abstract contract Core is
                     share
                 )
             );
-            require(verify(structHash, signatures), "verify");
+            if (!verify(structHash, signatures)) revert VerificationFailed();
         }
-        require(sender != bytes32(0), "sender");
-        require(recipient != address(0) && recipient != address(this), "recipient");
+        if (sender == bytes32(0)) revert InvalidSender();
+        if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
         // address(1) represents ETH on Raicoin network
-        require(address(token) > address(1), "token");
-        require(share > 0, "amount");
-        require(block.number > 0, "block number");
-        require(_unmappedTxns[txnHash] == 0, "mapped");
+        if (address(token) <= address(1)) revert InvalidTokenAddress();
+        if (share == 0) revert InvalidShare();
+        if (block.number == 0) revert ZeroBlockNumber();
+        if (_unmappedTxns[txnHash] != 0) revert AlreadyUnmapped();
         _unmappedTxns[txnHash] = block.number;
 
         TokenInfo memory info = _tokenInfos[address(token)];
-        require(info.initialized, "init");
-        require(info.tokenType == TokenType.ERC20, "type");
-        require(!info.wrapped, "wrapped");
+        if (!info.initialized) revert TokenNotInitialized();
+        if (info.tokenType != TokenType.ERC20) revert TokenTypeNotMatch();
+        if (info.wrapped) revert CanNotUnmapWrappedToken();
 
         uint256 amount = share;
         uint256 balance = token.balanceOf(address(this));
         if (info.versatile || balance < info.reserve) {
             amount = (share * balance) / info.reserve;
         }
-        require(amount > 0, "amount");
+        if (amount == 0) revert InvalidAmount();
+
         info.reserve -= share;
         _tokenInfos[address(token)] = info;
         SafeERC20Upgradeable.safeTransferFrom(token, address(this), recipient, amount);
@@ -429,18 +432,20 @@ abstract contract Core is
             bytes32 structHash = keccak256(
                 abi.encode(_UNMAP_ETH_TYPEHASH, sender, recipient, txnHash, txnHeight, amount)
             );
-            require(verify(structHash, signatures), "verify");
+            if (!verify(structHash, signatures)) revert VerificationFailed();
         }
-        require(sender != bytes32(0), "sender");
-        require(recipient != address(0) && recipient != address(this), "recipient");
-        require(amount > 0, "amount");
-        require(block.number > 0, "block number");
-        require(_unmappedTxns[txnHash] == 0, "mapped");
+        if (sender == bytes32(0)) revert InvalidSender();
+        if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
+        if (amount == 0) revert InvalidAmount();
+        if (block.number == 0) revert ZeroBlockNumber();
+        if (_unmappedTxns[txnHash] != 0) revert AlreadyUnmapped();
         _unmappedTxns[txnHash] = block.number;
 
         _ethReserve -= amount;
+
+        // solhint-disable-next-line avoid-low-level-calls
         (bool success, ) = recipient.call{value: amount}("");
-        require(success, "call");
+        if (!success) revert TransferFailed();
 
         emit ETHUnmapped(sender, recipient, txnHash, txnHeight, amount, normalizedChainId());
     }
@@ -466,27 +471,27 @@ abstract contract Core is
                     tokenId
                 )
             );
-            require(verify(structHash, signatures), "verify");
+            if (!verify(structHash, signatures)) revert VerificationFailed();
         }
-        require(sender != bytes32(0), "sender");
-        require(recipient != address(0) && recipient != address(this), "recipient");
-        require(address(token) > address(1), "token");
-        require(_tokenIdReserve[token][tokenId] != 0, "tokenId");
-        require(_unmappedTxns[txnHash] == 0, "mapped");
-        require(block.number > 0, "block number");
+        if (sender == bytes32(0)) revert InvalidSender();
+        if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
+        if (address(token) <= address(1)) revert InvalidTokenAddress();
+        if (_tokenIdReserve[token][tokenId] == 0) revert TokenIdNotMapped();
+        if (_unmappedTxns[txnHash] != 0) revert AlreadyUnmapped();
+        if (block.number == 0) revert ZeroBlockNumber();
         _unmappedTxns[txnHash] = block.number;
 
         TokenInfo memory info = _tokenInfos[address(token)];
-        require(info.initialized, "init");
-        require(info.tokenType == TokenType.ERC721, "type");
-        require(!info.wrapped, "wrapped");
-        require(token.ownerOf(tokenId) == address(this), "owner");
+        if (!info.initialized) revert TokenNotInitialized();
+        if (info.tokenType != TokenType.ERC721) revert TokenTypeNotMatch();
+        if (info.wrapped) revert CanNotUnmapWrappedToken();
+        if (token.ownerOf(tokenId) != address(this)) revert TokenIdNotOwned();
 
         _tokenIdReserve[token][tokenId] = 0;
         info.reserve -= 1;
         _tokenInfos[address(token)] = info;
         token.safeTransferFrom(address(this), recipient, tokenId);
-        require(token.ownerOf(tokenId) != address(this), "transfer");
+        if (token.ownerOf(tokenId) == address(this)) revert TransferFailed();
 
         emit ERC721TokenUnmapped(
             address(token),
@@ -520,9 +525,16 @@ abstract contract Core is
                     decimals
                 )
             );
-            require(verify(structHash, signatures), "verify");
+            if (!verify(structHash, signatures)) revert VerificationFailed();
         }
-        require(_wrappedTokens[originalChainId][originalContract] == address(0), "created");
+        if (originalChainId == normalizedChainId() || originalChainId == 0) {
+            revert InvalidOriginalChainId();
+        }
+        if (originalContract == bytes32(0)) revert InvalidOriginalContract();
+
+        if (_wrappedTokens[originalChainId][originalContract] != address(0)) {
+            revert WrappedTokenAlreadyCreated();
+        }
 
         address addr = _rai20Factory.create(
             name,
@@ -532,7 +544,7 @@ abstract contract Core is
             originalContract,
             decimals
         );
-        require(addr != address(0), "create");
+        if (addr == address(0)) revert CreateWrappedTokenFailed();
 
         {
             _wrappedTokens[originalChainId][originalContract] = addr;
@@ -571,9 +583,17 @@ abstract contract Core is
                     originalContract
                 )
             );
-            require(verify(structHash, signatures), "verify");
+            if (!verify(structHash, signatures)) revert VerificationFailed();
         }
-        require(_wrappedTokens[originalChainId][originalContract] == address(0), "created");
+
+        if (originalChainId == normalizedChainId() || originalChainId == 0) {
+            revert InvalidOriginalChainId();
+        }
+        if (originalContract == bytes32(0)) revert InvalidOriginalContract();
+
+        if (_wrappedTokens[originalChainId][originalContract] != address(0)) {
+            revert WrappedTokenAlreadyCreated();
+        }
 
         address addr = _rai721Factory.create(
             name,
@@ -582,7 +602,7 @@ abstract contract Core is
             originalChainId,
             originalContract
         );
-        require(addr != address(0), "create");
+        if (addr == address(0)) revert CreateWrappedTokenFailed();
 
         {
             _wrappedTokens[originalChainId][originalContract] = addr;
@@ -624,22 +644,28 @@ abstract contract Core is
                     amount
                 )
             );
-            require(verify(structHash, signatures), "verify");
+            if (!verify(structHash, signatures)) revert VerificationFailed();
         }
-        require(originalChainId != normalizedChainId(), "chainId");
-        require(sender != bytes32(0), "sender");
-        require(recipient != address(0) && recipient != address(this), "recipient");
-        require(amount > 0, "amount");
+        if (originalChainId == normalizedChainId() || originalChainId == 0) {
+            revert InvalidOriginalChainId();
+        }
+        if (originalContract == bytes32(0)) revert InvalidOriginalContract();
+        if (sender == bytes32(0)) revert InvalidSender();
+        if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
+        if (amount == 0) revert InvalidAmount();
 
         address addr = _wrappedTokens[originalChainId][originalContract];
-        require(addr != address(0), "missing");
+        if (addr == address(0)) revert WrappedTokenNotCreated();
+
         {
             TokenInfo memory info = _tokenInfos[addr];
-            require(info.initialized, "init");
-            require(info.tokenType == TokenType.ERC20, "type");
-            require(info.wrapped, "not wrap");
+            if (!info.initialized) revert TokenNotInitialized();
+            if (info.tokenType != TokenType.ERC20) revert TokenTypeNotMatch();
+            if (!info.wrapped) revert NotWrappedToken();
         }
+
         IRAI20(addr).mint(recipient, amount);
+
         emit ERC20TokenWrapped(
             originalChainId,
             originalContract,
@@ -676,20 +702,26 @@ abstract contract Core is
                     tokenId
                 )
             );
-            require(verify(structHash, signatures), "verify");
+            if (!verify(structHash, signatures)) revert VerificationFailed();
         }
-        require(originalChainId != normalizedChainId(), "chainId");
-        require(sender != bytes32(0), "sender");
-        require(recipient != address(0) && recipient != address(this), "recipient");
+        if (originalChainId == normalizedChainId() || originalChainId == 0) {
+            revert InvalidOriginalChainId();
+        }
+        if (originalContract == bytes32(0)) revert InvalidOriginalContract();
+        
+        if (sender == bytes32(0)) revert InvalidSender();
+        if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
 
         address addr = _wrappedTokens[originalChainId][originalContract];
-        require(addr != address(0), "missing");
+        if (addr == address(0)) revert WrappedTokenNotCreated();
+
         {
             TokenInfo memory info = _tokenInfos[addr];
-            require(info.initialized, "init");
-            require(info.tokenType == TokenType.ERC721, "type");
-            require(info.wrapped, "not wrap");
+            if (!info.initialized) revert TokenNotInitialized();
+            if (info.tokenType != TokenType.ERC721) revert TokenTypeNotMatch();
+            if (!info.wrapped) revert NotWrappedToken();
         }
+
         IRAI721(addr).mint(recipient, tokenId);
         emit ERC721TokenWrapped(
             originalChainId,
@@ -709,14 +741,15 @@ abstract contract Core is
         uint256 amount,
         bytes32 recipient
     ) external payable chargeFee(msg.value) {
-        require(recipient != bytes32(0), "recipient");
-        require(amount > 0, "amount");
+        if (address(token) == address(0)) revert InvalidTokenAddress();
+        if (recipient == bytes32(0)) revert InvalidRecipient();
+        if (amount == 0) revert InvalidAmount();
 
         {
             TokenInfo memory info = _tokenInfos[address(token)];
-            require(info.initialized, "init");
-            require(info.tokenType == TokenType.ERC20, "type");
-            require(info.wrapped, "not wrap");
+            if (!info.initialized) revert TokenNotInitialized();
+            if (info.tokenType != TokenType.ERC20) revert TokenTypeNotMatch();
+            if (!info.wrapped) revert NotWrappedToken();
         }
 
         SafeERC20Upgradeable.safeTransferFrom(token, _msgSender(), address(this), amount);
@@ -738,13 +771,14 @@ abstract contract Core is
         uint256 tokenId,
         bytes32 recipient
     ) external payable chargeFee(msg.value) {
-        require(recipient != bytes32(0), "recipient");
+        if (address(token) == address(0)) revert InvalidTokenAddress();
+        if (recipient == bytes32(0)) revert InvalidRecipient();
 
         {
             TokenInfo memory info = _tokenInfos[address(token)];
-            require(info.initialized, "init");
-            require(info.tokenType == TokenType.ERC721, "type");
-            require(info.wrapped, "not wrap");
+            if (!info.initialized) revert TokenNotInitialized();
+            if (info.tokenType != TokenType.ERC721) revert TokenTypeNotMatch();
+            if (!info.wrapped) revert NotWrappedToken();
         }
 
         token.safeTransferFrom(_msgSender(), address(this), tokenId);
@@ -772,7 +806,7 @@ abstract contract Core is
     function normalizedChainId() public view virtual returns (uint32);
 
     function _authorizeUpgrade(address impl) internal virtual override {
-        require(impl != address(0) && impl == _newImplementation, "impl");
+        if (impl == address(0) || impl != _newImplementation) revert InvalidImplementation();
         _newImplementation = address(0);
     }
 
@@ -781,7 +815,7 @@ abstract contract Core is
         IERC20Upgradeable token,
         bool wrapped
     ) private {
-        require(!info.initialized, "initialized");
+        if (info.initialized) revert TokenAlreadyInitialized();
         info.decimals = IDecimals(address(token)).decimals();
         info.tokenType = TokenType.ERC20;
         info.wrapped = wrapped;
@@ -801,14 +835,16 @@ abstract contract Core is
         IERC721Upgradeable token,
         bool wrapped
     ) private {
-        require(!info.initialized, "initialized");
-        require(
-            ERC165CheckerUpgradeable.supportsInterface(
+        if (info.initialized) revert TokenAlreadyInitialized();
+        if (
+            !ERC165CheckerUpgradeable.supportsInterface(
                 address(token),
                 type(IERC721Upgradeable).interfaceId
-            ),
-            "interfaceId"
-        );
+            )
+        ) {
+            revert NotERC721Token();
+        }
+
         info.decimals = 0;
         info.tokenType = TokenType.ERC721;
         info.wrapped = wrapped;

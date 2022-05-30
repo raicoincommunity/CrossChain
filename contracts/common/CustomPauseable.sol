@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -7,6 +7,7 @@ import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
 import "./CustomEIP712Upgradeable.sol";
 import "./NonceManager.sol";
 import "./Verifier.sol";
+import "./errors.sol";
 
 contract CustomPausable is
     Initializable,
@@ -26,7 +27,7 @@ contract CustomPausable is
         useNonce(nonce)
     {
         bytes32 structHash = keccak256(abi.encode(_PAUSE_TYPEHASH, nonce));
-        require(verify(structHash, signatures), "verify");
+        if (!verify(structHash, signatures)) revert VerificationFailed();
 
         _pause();
     }
@@ -38,7 +39,7 @@ contract CustomPausable is
         useNonce(nonce)
     {
         bytes32 structHash = keccak256(abi.encode(_UNPAUSE_TYPEHASH, nonce));
-        require(verify(structHash, signatures), "verify");
+        if (!verify(structHash, signatures)) revert VerificationFailed();
 
         _unpause();
     }

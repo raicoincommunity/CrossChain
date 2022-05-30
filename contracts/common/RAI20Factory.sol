@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "./Component.sol";
+import "./errors.sol";
 
 contract RAI20 is ERC20 {
     uint8 private immutable _decimals;
@@ -26,7 +27,7 @@ contract RAI20 is ERC20 {
     }
 
     modifier onlyCoreContract() {
-        require(_coreContract == _msgSender(), "Not from core");
+        if (_msgSender() != _coreContract) revert NotCalledByCoreContract();
         _;
     }
 
@@ -100,7 +101,7 @@ contract RAI20Factory is Component {
             coreContract: coreContract()
         });
         addr = address(new RAI20{salt: calcSalt(originalChainId, originalContract)}());
-        require(addr != address(0), "create token failed");
+        if (addr == address(0)) revert CreateWrappedTokenFailed();
         delete _parameters;
         emit TokenCreated(addr);
         return addr;
