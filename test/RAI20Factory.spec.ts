@@ -36,7 +36,7 @@ describe("RAI20Factory", function () {
     before(deploy);
 
     it("Should revert if not set by deployer", async function () {
-      await expect(factoryInstance.connect(addr2).setCoreContract(addr1.address)).to.be.revertedWith("Not deployer");
+      await expect(factoryInstance.connect(addr2).setCoreContract(addr1.address)).to.be.revertedWith("NotCalledByDeployer");
     });
 
     it("Should set the coreContract", async function () {
@@ -46,7 +46,7 @@ describe("RAI20Factory", function () {
     });
 
     it("Should revert if the coreContract has been set", async function () {
-      await expect(factoryInstance.setCoreContract(addr2.address)).to.be.revertedWith("Already set");
+      await expect(factoryInstance.setCoreContract(addr2.address)).to.be.revertedWith("CoreContractAreadySet");
     });
   });
 
@@ -54,8 +54,8 @@ describe("RAI20Factory", function () {
     before(deploy);
 
     it("Should revert if coreContract is not set", async function () {
-      const tx = factoryInstance.create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
-      await expect(tx).to.be.revertedWith("Not core contract");
+      const tx = factoryInstance.create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x0000000000000000000000002170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
+      await expect(tx).to.be.revertedWith("NotCalledByCoreContract");
     });
 
     it("Should set the coreContract", async function () {
@@ -65,13 +65,13 @@ describe("RAI20Factory", function () {
     });
 
     it("Should revert if not called by coreContract", async function () {
-      const tx = factoryInstance.connect(addr1).create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
-      await expect(tx).to.be.revertedWith("Not core contract");
+      const tx = factoryInstance.connect(addr1).create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x0000000000000000000000002170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
+      await expect(tx).to.be.revertedWith("NotCalledByCoreContract");
     });
 
     let token: RAI20;
     it("Should create a new RAI20 token", async function () {
-      const tx = await factoryInstance.connect(core).create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
+      const tx = await factoryInstance.connect(core).create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x0000000000000000000000002170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
       const receipt = await tx.wait();
       const tokenAddr = abiCoder.decode(["address"], receipt.logs![0].data!)[0];
 
@@ -80,13 +80,13 @@ describe("RAI20Factory", function () {
       expect(await token.symbol()).to.equal("rETH_bsc");
       expect(await token.originalChain()).to.equal("Binance Smart Chain");
       expect(await token.originalChainId()).to.equal(2);
-      expect(await token.originalContract()).to.equal("0x2170Ed0880ac9A755fd29B2688956BD959F933F8");
+      expect(await token.originalContract()).to.equal("0x0000000000000000000000002170Ed0880ac9A755fd29B2688956BD959F933F8".toLowerCase());
       expect(await token.decimals()).to.equal(18);
       expect(await token.coreContract()).to.equal(core.address);
     });
 
     it("Should revert if create with the same chain ID and contract address", async function () {
-      const tx = factoryInstance.connect(core).create("Ethereum Token2", "rETH2_bsc", "Binance Smart Chain 2", 2, "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", 8);
+      const tx = factoryInstance.connect(core).create("Ethereum Token2", "rETH2_bsc", "Binance Smart Chain 2", 2, "0x0000000000000000000000002170Ed0880ac9A755fd29B2688956BD959F933F8", 8);
       await expect(tx).to.be.reverted;
     });
   });
@@ -102,7 +102,7 @@ describe("RAI20Factory", function () {
 
     let token: RAI20;
     it("Should create a new RAI20 token", async function () {
-      const tx = await factoryInstance.connect(core).create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x2170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
+      const tx = await factoryInstance.connect(core).create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x0000000000000000000000002170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
       const receipt = await tx.wait();
       const tokenAddr = abiCoder.decode(["address"], receipt.logs![0].data!)[0];
       token = await ethers.getContractAt("RAI20", tokenAddr);
@@ -110,7 +110,7 @@ describe("RAI20Factory", function () {
 
     it("Should revert if not mint by coreContract", async function () {
       const tx = token.connect(owner).mint(owner.address, 1000);
-      await expect(tx).to.be.revertedWith("Not from core");
+      await expect(tx).to.be.revertedWith("NotCalledByCoreContract");
     });
 
     it("Should mint success", async function () {
@@ -126,7 +126,7 @@ describe("RAI20Factory", function () {
 
     it("Should revert if not burn by coreContract", async function () {
       const tx = token.connect(addr1).burn(500);
-      await expect(tx).to.be.revertedWith("Not from core");
+      await expect(tx).to.be.revertedWith("NotCalledByCoreContract");
     });
 
     it("Should burn success", async function () {

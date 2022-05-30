@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
@@ -8,7 +8,7 @@ import "./CustomEIP712Upgradeable.sol";
 import "./NonceManager.sol";
 import "./Component.sol";
 import "./IVerifier.sol";
-
+import "./errors.sol";
 
 contract ValidatorManager is
     Initializable,
@@ -74,7 +74,8 @@ contract ValidatorManager is
 
     /*=========================== 5. MODIFIERS ===============================*/
     modifier onlySigner(address signer) {
-        require(msg.sender == signer && tx.origin == signer, "Not from signer");
+        // solhint-disable-next-line avoid-tx-origin
+        if (msg.sender != signer || tx.origin != signer) revert NotCalledBySigner();
         _;
     }
 
@@ -101,10 +102,9 @@ contract ValidatorManager is
         uint256 nonce,
         bytes calldata signatures
     ) external nonReentrant whenNotPaused useNonce(nonce) coreContractValid {
-        require(
-            verify(keccak256(abi.encode(_SET_FEE_RATE_TYPEHASH, feeRate, nonce)), signatures),
-            "verify"
-        );
+        if (!verify(keccak256(abi.encode(_SET_FEE_RATE_TYPEHASH, feeRate, nonce)), signatures)) {
+            revert VerificationFailed();
+        }
         _feeRate = feeRate;
         emit FeeRateUpdated(feeRate, nonce);
         IVerifier(coreContract()).setFee(feeRate * _weightedGasPrice);
@@ -123,13 +123,13 @@ contract ValidatorManager is
             bytes32 structHash = keccak256(
                 abi.encode(_SUBMIT_VALIDATOR_TYPEHASH, validator, signer, weight, epoch)
             );
-            require(verify(structHash, signatures), "verify");
+            if (!verify(structHash, signatures)) revert VerificationFailed();
         }
-        require(validator != bytes32(0) && validator != _genesisValidator, "validator");
-        require(signer != address(0) && signer != _genesisSigner, "signer");
+        if (validator == bytes32(0) || validator == _genesisValidator) revert InvalidValidator();
+        if (signer == address(0) || signer == _genesisSigner) revert InvalidSigner();
 
         ValidatorInfo memory info = _validatorInfos[validator];
-        require(epoch >= info.epoch && epoch == _getCurrentEpoch(), "epoch");
+        if (epoch < info.epoch || epoch != _getCurrentEpoch()) revert InvalidEpoch();
 
         uint256 totalWeight = _totalWeight;
         uint256 weightClear = _revokeSubmission(validator, info, false);
@@ -137,8 +137,8 @@ contract ValidatorManager is
             weightClear = 0;
         }
 
-        require(_signerToValidator[signer] == bytes32(0), "signer");
-        require(_weights[signer] == 0, "weight");
+        if (_signerToValidator[signer] != bytes32(0)) revert SignerReferencedByOtherValidator();
+        if (_weights[signer] != 0) revert SignerWeightNotCleared();
 
         if (info.epoch == 0) {
             _validators.push(validator);
@@ -146,6 +146,7 @@ contract ValidatorManager is
 
         info.gasPrice = tx.gasprice;
         info.signer = signer;
+        // solhint-disable-next-line not-rely-on-time
         info.lastSubmit = uint64(block.timestamp);
         info.epoch = epoch;
         _doSubmission(validator, info, weight);
@@ -161,7 +162,7 @@ contract ValidatorManager is
         whenNotPaused
         coreContractValid
     {
-        require(_inPurgeTimeRange(), "time");
+        if (!_inPurgeTimeRange()) revert NotInPurgeTimeRange();
         uint256 totalWeight = _totalWeight;
         uint256 weight = 0;
         for (uint256 i = 0; i < validators.length; i++) {
@@ -210,9 +211,13 @@ contract ValidatorManager is
         return verifyTypedData(typedHash, signatures);
     }
 
-    function verifyTypedData(bytes32 typedHash, bytes calldata signatures) public view returns (bool) {
+    function verifyTypedData(bytes32 typedHash, bytes calldata signatures)
+        public
+        view
+        returns (bool)
+    {
         uint256 length = signatures.length;
-        require(length > 0 && length % 65 == 0, "signatures");
+        if (length == 0 || length % 65 != 0) revert InvalidSignatures();
         uint256 count = length / 65;
 
         uint256 total = _totalWeight;
@@ -230,7 +235,8 @@ contract ValidatorManager is
         for (i = 0; i < count; ++i) {
             (r, s, v) = _decodeSignature(signatures, i);
             current = ecrecover(typedHash, v, r, s);
-            require(current > last, "signer order");
+            if (current == address(0)) revert EcrecoverFailed();
+            if (current <= last) revert InvalidSignerOrder();
             last = current;
             weight += _getWeight(current, genesis, total);
         }
@@ -252,6 +258,7 @@ contract ValidatorManager is
     }
 
     function _getCurrentEpoch() internal view returns (uint32) {
+        // solhint-disable-next-line not-rely-on-time
         return uint32(block.timestamp / _EPOCH_TIME);
     }
 
@@ -267,10 +274,12 @@ contract ValidatorManager is
         if (delay > rewardTime - hour) {
             delay = rewardTime - hour;
         }
+        // solhint-disable-next-line not-rely-on-time
         return (block.timestamp % epochTime) >= delay;
     }
 
     function _inPurgeTimeRange() internal view returns (bool) {
+        // solhint-disable-next-line not-rely-on-time
         return (block.timestamp % _EPOCH_TIME) > _REWARD_TIME;
     }
 
@@ -339,13 +348,17 @@ contract ValidatorManager is
         return weight;
     }
 
-    function _sendReward(address to, uint256 weight, uint256 totalWeight) private {
+    function _sendReward(
+        address to,
+        uint256 weight,
+        uint256 totalWeight
+    ) private {
         if (weight == 0) {
             return;
         }
         uint256 share = _REWARD_FACTOR;
         if (weight < totalWeight) {
-            share = _REWARD_FACTOR * weight / totalWeight;
+            share = (_REWARD_FACTOR * weight) / totalWeight;
         }
         IVerifier(coreContract()).sendReward(to, share);
     }
@@ -403,6 +416,4 @@ contract ValidatorManager is
         emit WeightedGasPriceUpdated(currentPrice, price);
         IVerifier(coreContract()).setFee(_feeRate * price);
     }
-
 }
-

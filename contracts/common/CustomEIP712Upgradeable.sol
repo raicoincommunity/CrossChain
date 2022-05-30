@@ -3,7 +3,7 @@
 // This contract will be frequently called by user, custom it for gas saving
 
 // OpenZeppelin Contracts v4.4.1 (utils/cryptography/draft-EIP712.sol)
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
@@ -51,11 +51,13 @@ abstract contract CustomEIP712Upgradeable is Initializable {
      * NOTE: These parameters cannot be changed except through a xref:learn::upgrading-smart-contracts.adoc[smart
      * contract upgrade].
      */
+     // solhint-disable-next-line no-empty-blocks
     function __EIP712_init() internal onlyInitializing {}
 
     function __EIP712_init_unchained(string memory name, string memory version)
         internal
         onlyInitializing
+     // solhint-disable-next-line no-empty-blocks
     {}
 
     /**

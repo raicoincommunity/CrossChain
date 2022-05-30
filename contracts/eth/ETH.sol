@@ -7,6 +7,10 @@ import "../common/IRAI721Factory.sol";
 import "../common/IValidatorManager.sol";
 
 contract ETH is Core {
+    constructor() {
+        if (block.chainid != 1) revert ChainIdMismatch();
+    }
+    
     function initialize(
         IValidatorManager validatorManager,
         IRAI20Factory rai20Factory,

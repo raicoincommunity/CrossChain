@@ -5,8 +5,13 @@ import "../common/Core.sol";
 import "../common/IRAI20Factory.sol";
 import "../common/IRAI721Factory.sol";
 import "../common/IValidatorManager.sol";
+import "../common/errors.sol";
 
 contract BSC is Core {
+    constructor() {
+        if (block.chainid != 56) revert ChainIdMismatch();
+    }
+
     function initialize(
         IValidatorManager validatorManager,
         IRAI20Factory rai20Factory,

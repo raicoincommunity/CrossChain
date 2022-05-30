@@ -34,7 +34,7 @@ describe("RAI721Factory", function () {
         before(deploy);
 
         it("Should revert if not set by deployer", async function () {
-            await expect(factoryInstance.connect(addr2).setCoreContract(addr1.address)).to.be.revertedWith("Not deployer");
+            await expect(factoryInstance.connect(addr2).setCoreContract(addr1.address)).to.be.revertedWith("NotCalledByDeployer");
         });
 
         it("Should set the coreContract", async function () {
@@ -44,7 +44,7 @@ describe("RAI721Factory", function () {
         });
 
         it("Should revert if the coreContract has been set", async function () {
-            await expect(factoryInstance.setCoreContract(addr2.address)).to.be.revertedWith("Already set");
+            await expect(factoryInstance.setCoreContract(addr2.address)).to.be.revertedWith("CoreContractAreadySet");
         });
     });
 
@@ -52,8 +52,8 @@ describe("RAI721Factory", function () {
         before(deploy);
 
         it("Should revert if coreContract is not set", async function () {
-            const tx = factoryInstance.create("", "", "Ethereum", 2, "0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
-            await expect(tx).to.be.revertedWith("Not core contract");
+            const tx = factoryInstance.create("", "", "Ethereum", 2, "0x00000000000000000000000057f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
+            await expect(tx).to.be.revertedWith("NotCalledByCoreContract");
         });
 
         it("Should set the coreContract", async function () {
@@ -63,13 +63,13 @@ describe("RAI721Factory", function () {
         });
 
         it("Should revert if not called by coreContract", async function () {
-            const tx = factoryInstance.connect(addr1).create("", "", "Ethereum", 2, "0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
-            await expect(tx).to.be.revertedWith("Not core contract");
+            const tx = factoryInstance.connect(addr1).create("", "", "Ethereum", 2, "0x00000000000000000000000057f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
+            await expect(tx).to.be.revertedWith("NotCalledByCoreContract");
         });
 
         let token: RAI721;
         it("Should create a new RAI721 token", async function () {
-            const tx = await factoryInstance.connect(core).create("", "", "Ethereum", 2, "0x57f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
+            const tx = await factoryInstance.connect(core).create("", "", "Ethereum", 2, "0x00000000000000000000000057f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
             const receipt = await tx.wait();
             const tokenAddr = abiCoder.decode(["address"], receipt.logs![0].data!)[0];
 
@@ -78,12 +78,12 @@ describe("RAI721Factory", function () {
             expect(await token.symbol()).to.equal("");
             expect(await token.originalChain()).to.equal("Ethereum");
             expect(await token.originalChainId()).to.equal(2);
-            expect(await token.originalContract()).to.equal("0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85");
+            expect(await token.originalContract()).to.equal("0x00000000000000000000000057f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
             expect(await token.coreContract()).to.equal(core.address);
         });
 
         it("Should revert if create with the same chain ID and contract address", async function () {
-            const tx = factoryInstance.connect(core).create("", "", "Ethereum", 2, "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85");
+            const tx = factoryInstance.connect(core).create("", "", "Ethereum", 2, "0x00000000000000000000000057f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
             await expect(tx).to.be.reverted;
         });
     });
@@ -99,7 +99,7 @@ describe("RAI721Factory", function () {
 
         let token: RAI721;
         it("Should create a new RAI721 token", async function () {
-            const tx = await factoryInstance.connect(core).create("Ethereum Name Service", "rENS_eth", "Ethereum", 2, "0x57f1887a8BF19b14fC0dF6Fd9B2acc9Af147eA85");
+            const tx = await factoryInstance.connect(core).create("Ethereum Name Service", "rENS_eth", "Ethereum", 2, "0x00000000000000000000000057f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
             const receipt = await tx.wait();
             const tokenAddr = abiCoder.decode(["address"], receipt.logs![0].data!)[0];
             token = await ethers.getContractAt("RAI721", tokenAddr);
@@ -107,7 +107,7 @@ describe("RAI721Factory", function () {
 
         it("Should revert if not mint by coreContract", async function () {
             const tx = token.connect(owner).mint(owner.address, 1000);
-            await expect(tx).to.be.revertedWith("Not from core");
+            await expect(tx).to.be.revertedWith("NotCalledByCoreContract");
         });
 
         it("Should mint success", async function () {
@@ -123,7 +123,7 @@ describe("RAI721Factory", function () {
 
         it("Should revert if not burn by coreContract", async function () {
             const tx = token.connect(addr1).burn(1);
-            await expect(tx).to.be.revertedWith("Not from core");
+            await expect(tx).to.be.revertedWith("NotCalledByCoreContract");
         });
 
         it("Should burn success", async function () {
@@ -141,7 +141,7 @@ describe("RAI721Factory", function () {
 
         it("Should revert if burn token not owned", async function () {
             const tx = token.connect(core).burn(2000);
-            await expect(tx).to.be.revertedWith("Not owned");
+            await expect(tx).to.be.revertedWith("TokenIdNotOwned");
         });
 
         it("Should revert if burn token not existing", async function () {
