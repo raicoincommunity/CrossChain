@@ -34,6 +34,8 @@ abstract contract Core is
     Verifier,
     CustomPausable
 {
+    using SafeERC20Upgradeable for IERC20Upgradeable;
+
     /*=========================== 1. STRUCTS =================================*/
     enum TokenType {
         INVALID,
@@ -44,7 +46,7 @@ abstract contract Core is
     struct TokenInfo {
         uint256 reserve;
         TokenType tokenType;
-        bool versatile; // the balance is subject to external changes, e.g.
+        bool volatile; // the balance is subject to external changes, e.g. SafeMoon
         bool wrapped;
         bool initialized;
         uint8 decimals;
@@ -55,7 +57,7 @@ abstract contract Core is
         keccak256("Upgrade(address newImplementation,uint256 nonce)");
     bytes32 private constant _UNMAP_ERC20_TYPEHASH =
         keccak256(
-            "UnmapERC20(IERC20Upgradeable token,bytes32 sender,address recipient,bytes32 txnHash,uint64 txnHeight,uint256 share)"
+            "UnmapERC20(address token,bytes32 sender,address recipient,bytes32 txnHash,uint64 txnHeight,uint256 share)"
         );
     bytes32 private constant _UNMAP_ETH_TYPEHASH =
         keccak256(
@@ -63,7 +65,7 @@ abstract contract Core is
         );
     bytes32 private constant _UNMAP_ERC721_TYPEHASH =
         keccak256(
-            "UnmapERC721(IERC721Upgradeable token,bytes32 sender,address recipient,bytes32 txnHash,uint64 txnHeight,uint256 tokenId)"
+            "UnmapERC721(address token,bytes32 sender,address recipient,bytes32 txnHash,uint64 txnHeight,uint256 tokenId)"
         );
     bytes32 private constant _CREATE_WRAPPED_ERC20_TOKEN_TYPEHASH =
         keccak256(
@@ -281,7 +283,7 @@ abstract contract Core is
         uint256 amount,
         bytes32 recipient
     ) external payable nonReentrant whenNotPaused chargeFee(msg.value) {
-        if (address(token) == address(0)) revert InvalidTokenAddress();
+        if (address(token) <= address(1)) revert InvalidTokenAddress();
         if (amount <= 1) revert InvalidAmount();
         if (recipient == bytes32(0)) revert InvalidRecipient();
 
@@ -293,12 +295,12 @@ abstract contract Core is
         if (info.wrapped) revert CanNotMapWrappedToken();
 
         uint256 balance = token.balanceOf(address(this));
-        SafeERC20Upgradeable.safeTransferFrom(token, _msgSender(), address(this), amount);
+        token.safeTransferFrom(_msgSender(), address(this), amount);
         uint256 newBalance = token.balanceOf(address(this));
         if (newBalance <= balance + 1) revert InvalidBalance();
 
         uint256 share = newBalance - balance;
-        if (info.versatile || info.reserve < balance) {
+        if ((balance > 0) && (balance < info.reserve || info.volatile)) {
             share = (share * info.reserve) / balance;
         }
         if (share == 0) revert InvalidShare();
@@ -333,7 +335,7 @@ abstract contract Core is
         uint256 tokenId,
         bytes32 recipient
     ) external payable nonReentrant whenNotPaused chargeFee(msg.value) {
-        if (address(token) == address(0)) revert InvalidTokenAddress();
+        if (address(token) <= address(1)) revert InvalidTokenAddress();
         if (_tokenIdReserve[token][tokenId] != 0) revert TokenIdAlreadyMapped();
         if (recipient == bytes32(0)) revert InvalidRecipient();
         if (block.number == 0) revert ZeroBlockNumber();
@@ -400,14 +402,14 @@ abstract contract Core is
 
         uint256 amount = share;
         uint256 balance = token.balanceOf(address(this));
-        if (info.versatile || balance < info.reserve) {
+        if (balance < info.reserve || info.volatile) {
             amount = (share * balance) / info.reserve;
         }
         if (amount == 0) revert InvalidAmount();
 
         info.reserve -= share;
         _tokenInfos[address(token)] = info;
-        SafeERC20Upgradeable.safeTransferFrom(token, address(this), recipient, amount);
+        token.safeTransferFrom(address(this), recipient, amount);
         emit ERC20TokenUnmapped(
             address(token),
             sender,
@@ -512,7 +514,7 @@ abstract contract Core is
         bytes32 originalContract,
         uint8 decimals,
         bytes calldata signatures
-    ) external {
+    ) external nonReentrant whenNotPaused {
         {
             bytes32 structHash = keccak256(
                 abi.encode(
@@ -571,7 +573,7 @@ abstract contract Core is
         uint32 originalChainId,
         bytes32 originalContract,
         bytes calldata signatures
-    ) external {
+    ) external nonReentrant whenNotPaused {
         {
             bytes32 structHash = keccak256(
                 abi.encode(
@@ -708,7 +710,7 @@ abstract contract Core is
             revert InvalidOriginalChainId();
         }
         if (originalContract == bytes32(0)) revert InvalidOriginalContract();
-        
+
         if (sender == bytes32(0)) revert InvalidSender();
         if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
 
@@ -752,7 +754,7 @@ abstract contract Core is
             if (!info.wrapped) revert NotWrappedToken();
         }
 
-        SafeERC20Upgradeable.safeTransferFrom(token, _msgSender(), address(this), amount);
+        token.safeTransferFrom(_msgSender(), address(this), amount);
         IRAI20(address(token)).burn(amount);
 
         emit ERC20TokenUnwrapped(

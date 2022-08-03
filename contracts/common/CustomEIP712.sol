@@ -5,8 +5,6 @@
 // OpenZeppelin Contracts v4.4.1 (utils/cryptography/draft-EIP712.sol)
 pragma solidity ^0.8.14;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-
 /**
  * @dev https://eips.ethereum.org/EIPS/eip-712[EIP 712] is a standard for hashing and signing of typed structured data.
  *
@@ -28,7 +26,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
  *
  * @custom:storage-size 52
  */
-abstract contract CustomEIP712Upgradeable is Initializable {
+abstract contract CustomEIP712 {
     /* solhint-disable var-name-mixedcase */
     bytes32 private constant _HASHED_NAME = keccak256("Raicoin");
     bytes32 private constant _HASHED_VERSION = keccak256("1.0");
@@ -38,29 +36,6 @@ abstract contract CustomEIP712Upgradeable is Initializable {
         );
 
     /* solhint-enable var-name-mixedcase */
-
-    /**
-     * @dev Initializes the domain separator and parameter caches.
-     *
-     * The meaning of `name` and `version` is specified in
-     * https://eips.ethereum.org/EIPS/eip-712#definition-of-domainseparator[EIP 712]:
-     *
-     * - `name`: the user readable name of the signing domain, i.e. the name of the DApp or the protocol.
-     * - `version`: the current major version of the signing domain.
-     *
-     * NOTE: These parameters cannot be changed except through a xref:learn::upgrading-smart-contracts.adoc[smart
-     * contract upgrade].
-     */
-    // solhint-disable-next-line no-empty-blocks
-    function __EIP712_init() internal onlyInitializing {}
-
-    function __EIP712_init_unchained(string memory name, string memory version)
-        internal
-        onlyInitializing
-    // solhint-disable-next-line no-empty-blocks
-    {
-
-    }
 
     /**
      * @dev Returns the domain separator for the current chain.
