@@ -7,7 +7,8 @@ import "@typechain/hardhat";
 import "hardhat-gas-reporter";
 import "hardhat-contract-sizer";
 import "solidity-coverage";
-import "@openzeppelin/hardhat-upgrades"
+import "@openzeppelin/hardhat-upgrades";
+import "hardhat-abi-exporter";
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ const config: HardhatUserConfig = {
       }
     }
   },
+
   networks: {
     ropsten: {
       url: process.env.ROPSTEN_URL || "",
@@ -43,15 +45,56 @@ const config: HardhatUserConfig = {
     ganache: {
       url: "http://127.0.0.1:7545",
       // accounts: [privateKey1, privateKey2, ...]
-    }
+    },
+    bsctest: {
+      url: "https://data-seed-prebsc-1-s1.binance.org:8545/",
+      accounts:
+        process.env.BSC_TEST_PRIVATE_KEY !== undefined ? [process.env.BSC_TEST_PRIVATE_KEY] : [],
+    },
+    goerli: {
+      url: "https://rpc.ankr.com/eth_goerli",
+      accounts:
+        process.env.GOERLI_PRIVATE_KEY !== undefined ? [process.env.GOERLI_PRIVATE_KEY] : [],
+    },
+
   },
+
   gasReporter: {
     enabled: process.env.REPORT_GAS !== undefined,
     currency: "USD",
   },
+
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY,
+    apiKey: {
+      mainnet: process.env.ETHERSCAN_API_KEY || "",
+      bscTestnet: process.env.BSCSCAN_API_KEY || "",
+      goerli: process.env.ETHERSCAN_API_KEY || "",
+    },
   },
+
+  abiExporter: [
+    {
+      path: './abi/pretty',
+      runOnCompile: true,
+      clear: true,
+      flat: false,
+      only: [],
+      spacing: 2,
+      pretty: true,
+      //format: "json",
+    },
+    {
+      path: './abi/json',
+      runOnCompile: true,
+      clear: true,
+      flat: false,
+      only: [],
+      spacing: 2,
+      //pretty: true,
+      format: "json",
+    },
+  ],
+
 };
 
 export default config;

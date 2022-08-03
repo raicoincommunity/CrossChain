@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.14;
 
 import "../common/Core.sol";
 import "../common/IRAI20Factory.sol";
@@ -7,15 +7,12 @@ import "../common/IRAI721Factory.sol";
 import "../common/IValidatorManager.sol";
 
 contract ETH is Core {
-    constructor() {
-        if (block.chainid != 1) revert ChainIdMismatch();
-    }
-    
     function initialize(
         IValidatorManager validatorManager,
         IRAI20Factory rai20Factory,
         IRAI721Factory rai721Factory
     ) external initializer {
+        if (block.chainid != 1) revert ChainIdMismatch();
         __Core_init(validatorManager, rai20Factory, rai721Factory);
     }
 

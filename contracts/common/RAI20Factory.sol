@@ -120,7 +120,7 @@ contract RAI20Factory is Component {
     }
 }
 
-contract FactoryHelper {
+contract RAI20FactoryHelper {
     //solhint-disable-next-line var-name-mixedcase
     bytes32 public immutable TOKEN_INIT_CODE_HASH =
         keccak256(abi.encodePacked(type(RAI20).creationCode));

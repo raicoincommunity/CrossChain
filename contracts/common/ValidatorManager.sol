@@ -1,29 +1,30 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.14;
 
-import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/security/PausableUpgradeable.sol";
-import "./CustomEIP712Upgradeable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "./CustomEIP712.sol";
 import "./NonceManager.sol";
 import "./Component.sol";
 import "./IVerifier.sol";
 import "./errors.sol";
 
-contract ValidatorManager is
-    Initializable,
-    ReentrancyGuardUpgradeable,
-    PausableUpgradeable,
-    CustomEIP712Upgradeable,
-    NonceManager,
-    Component
-{
+contract ValidatorManager is ReentrancyGuard, Pausable, CustomEIP712, NonceManager, Component {
     /*=========================== 1. STRUCTS =================================*/
     struct ValidatorInfo {
         uint256 gasPrice;
         address signer;
         uint64 lastSubmit;
         uint32 epoch;
+    }
+
+    struct ValidatorFullInfo {
+        bytes32 validator;
+        uint256 gasPrice;
+        address signer;
+        uint64 lastSubmit;
+        uint32 epoch;
+        uint256 weight;
     }
 
     /*=========================== 2. CONSTANTS ===============================*/
@@ -80,21 +81,10 @@ contract ValidatorManager is
     }
 
     /*=========================== 6. FUNCTIONS ===============================*/
-    function __ValidatorManager_init(bytes32 genesisValidator, address genesisSigner)
-        internal
-        onlyInitializing
-    {
-        __ValidatorManager_init_unchained(genesisValidator, genesisSigner);
-    }
-
-    function __ValidatorManager_init_unchained(bytes32 genesisValidator, address genesisSigner)
-        internal
-        onlyInitializing
-    {
+    constructor(bytes32 genesisValidator, address genesisSigner) {
         _feeRate = 21000;
         _genesisSigner = genesisSigner;
         _genesisValidator = genesisValidator;
-        _validators.push(genesisValidator);
     }
 
     function setFeeRate(
@@ -178,6 +168,14 @@ contract ValidatorManager is
         }
     }
 
+    function getGenesisValidator() external view returns (bytes32) {
+        return _genesisValidator;
+    }
+
+    function getGenesisSigner() external view returns (address) {
+        return _genesisSigner;
+    }
+
     function getWeight(address signer) external view returns (uint256) {
         return _getWeight(signer, _genesisSigner, _totalWeight);
     }
@@ -198,8 +196,26 @@ contract ValidatorManager is
         return _validatorInfos[validator];
     }
 
-    function getValidators() external view returns (bytes32[] memory) {
-        return _validators;
+    function getValidators(uint256 begin, uint256 end)
+        external
+        view
+        returns (ValidatorFullInfo[] memory)
+    {
+        uint256 length = _validators.length;
+        if (end > length) end = length;
+        if (begin >= end) return new ValidatorFullInfo[](0);
+        ValidatorFullInfo[] memory result = new ValidatorFullInfo[](end - begin);
+        for ((uint256 i, uint256 j) = (begin, 0); i < end; (++i, ++j)) {
+            bytes32 validator = _validators[i];
+            result[j].validator = validator;
+            ValidatorInfo memory info = _validatorInfos[validator];
+            result[j].gasPrice = info.gasPrice;
+            result[j].signer = info.signer;
+            result[j].lastSubmit = info.lastSubmit;
+            result[j].epoch = info.epoch;
+            result[j].weight = _weights[info.signer];
+        }
+        return result;
     }
 
     function getValidatorCount() external view returns (uint256) {

@@ -131,7 +131,7 @@ contract RAI721Factory is Component {
     }
 }
 
-contract FactoryHelper {
+contract RAI721FactoryHelper {
     //solhint-disable-next-line var-name-mixedcase
     bytes32 public immutable TOKEN_INIT_CODE_HASH =
         keccak256(abi.encodePacked(type(RAI721).creationCode));

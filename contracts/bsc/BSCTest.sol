@@ -7,17 +7,17 @@ import "../common/IRAI721Factory.sol";
 import "../common/IValidatorManager.sol";
 import "../common/errors.sol";
 
-contract BSC is Core {
+contract BSCTest is Core {
     function initialize(
         IValidatorManager validatorManager,
         IRAI20Factory rai20Factory,
         IRAI721Factory rai721Factory
     ) external initializer {
-        if (block.chainid != 56) revert ChainIdMismatch();
+        if (block.chainid != 97) revert ChainIdMismatch();
         __Core_init(validatorManager, rai20Factory, rai721Factory);
     }
 
     function normalizedChainId() public view virtual override returns (uint32) {
-        return 4;
+        return 10040;
     }
 }
