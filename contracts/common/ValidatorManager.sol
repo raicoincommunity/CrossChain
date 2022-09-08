@@ -142,7 +142,7 @@ contract ValidatorManager is ReentrancyGuard, Pausable, CustomEIP712, NonceManag
         _doSubmission(validator, info, weight);
 
         if (weightClear > 0 && rewardTo != address(0)) {
-            _sendReward(rewardTo, weight, totalWeight);
+            _sendReward(rewardTo, weightClear, totalWeight);
         }
     }
 

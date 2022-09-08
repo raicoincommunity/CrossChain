@@ -299,8 +299,11 @@ abstract contract Core is
         uint256 newBalance = token.balanceOf(address(this));
         if (newBalance <= balance + 1) revert InvalidBalance();
 
+        if (info.reserve == 0 && balance > 0) {
+            info.reserve = balance;
+        }
         uint256 share = newBalance - balance;
-        if ((balance > 0) && (balance < info.reserve || info.volatile)) {
+        if ((balance > 0 && info.reserve > 0) && (balance < info.reserve || info.volatile)) {
             share = (share * info.reserve) / balance;
         }
         if (share == 0) revert InvalidShare();
@@ -409,7 +412,7 @@ abstract contract Core is
 
         info.reserve -= share;
         _tokenInfos[address(token)] = info;
-        token.safeTransferFrom(address(this), recipient, amount);
+        token.safeTransfer(recipient, amount);
         emit ERC20TokenUnmapped(
             address(token),
             sender,
