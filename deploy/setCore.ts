@@ -42,17 +42,32 @@ async function main() {
     return;
   }
 
-  const validatorManagercontract = await ethers.getContractAt("ValidatorManager", validatorManager);
-  await validatorManagercontract.setCoreContract(core);
-  console.log(`[${network.name}] ValidatorManager.setCoreContract to: ${core}`);
+  const validatorManagerContract = await ethers.getContractAt("ValidatorManager", validatorManager);
+  let existing = await validatorManagerContract.coreContract();
+  if (existing === INVALID_DEPLOYED_ADDRESS) {
+    await validatorManagerContract.setCoreContract(core);
+    console.log(`[${network.name}] ValidatorManager.setCoreContract to: ${core}`);
+  } else {
+    console.log(`[${network.name}] ValidatorManager.setCoreContract skip: existing = ${existing}`);
+  }
 
   const rai20FactoryContract = await ethers.getContractAt("RAI20Factory", rai20Factory);
-  await rai20FactoryContract.setCoreContract(core);
-  console.log(`[${network.name}] RAI20Factory.setCoreContract to: ${core}`);
+  existing = await rai20FactoryContract.coreContract();
+  if (existing === INVALID_DEPLOYED_ADDRESS) {
+    await rai20FactoryContract.setCoreContract(core);
+    console.log(`[${network.name}] RAI20Factory.setCoreContract to: ${core}`);  
+  } else {
+    console.log(`[${network.name}] RAI20Factory.setCoreContract skip: existing = ${existing}`);
+  }
 
   const rai721FactoryContract = await ethers.getContractAt("RAI721Factory", rai721Factory);
-  await rai721FactoryContract.setCoreContract(core);
-  console.log(`[${network.name}] RAI721Factory.setCoreContract to: ${core}`);
+  existing = await rai721FactoryContract.coreContract();
+  if (existing === INVALID_DEPLOYED_ADDRESS) {
+    await rai721FactoryContract.setCoreContract(core);
+    console.log(`[${network.name}] RAI721Factory.setCoreContract to: ${core}`);
+  } else {
+    console.log(`[${network.name}] RAI721Factory.setCoreContract skip: existing = ${existing}`);
+  }
 }
 
 main().catch((error) => {

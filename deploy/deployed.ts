@@ -30,7 +30,7 @@ export const ETH_CONTRACTS: DeployedContracts = {
 
 // testnet
 export const BSC_TEST_CONTRACTS: DeployedContracts = {
-  validatorManager: '0x47D2d5e7F498f44466241700c197BB050f43C9B1',
+  validatorManager: '0x4f428DD655246e5e5a30e7853D6F575D7eE74449',
   rai20Factory: '0x65abfcfe3c57A421E42593EEF49722997D72Fd07',
   rai721Factory: '0x99787450483d49EbD7090e2D03DCB6b255d6459e',
   core: '0x68CF8517a569565F0B30f8856F0555d55d539307',

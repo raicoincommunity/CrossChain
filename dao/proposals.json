@@ -1,0 +1,41 @@
+[
+    {
+        "id": 1,
+        "chain": "binance smart chain testnet",
+        "chain_id":10040,
+        "contract": "0x68CF8517a569565F0B30f8856F0555d55d539307",
+        "method": "upgrade",
+        "params": {
+            "impl": "0x2dD5Dfc76FFf5D857ed7a38C11E27B07f55d0606",
+            "nonce": 0
+        },
+        "begin_time": "2022-09-07 00:00:00UTC",
+        "end_time": "2022-09-14 00:00:00UTC"
+    },
+    {
+        "id": 2,
+        "chain": "binance smart chain testnet",
+        "chain_id":10040,
+        "contract": "0x68CF8517a569565F0B30f8856F0555d55d539307",
+        "method": "upgrade",
+        "params": {
+            "impl": "0x0C7cf6e8193d73023FEa702C672ba02142697c38",
+            "nonce": 0
+        },
+        "begin_time": "2022-09-07 00:00:00UTC",
+        "end_time": "2022-09-14 00:00:00UTC"
+    },
+    {
+        "id": 3,
+        "chain": "binance smart chain testnet",
+        "chain_id":10040,
+        "contract": "0x68CF8517a569565F0B30f8856F0555d55d539307",
+        "method": "upgrade",
+        "params": {
+            "impl": "0x8d3514Db1088B9803e1377234F6F4fc408E46D64",
+            "nonce": 0
+        },
+        "begin_time": "2022-09-07 00:00:00UTC",
+        "end_time": "2022-09-14 00:00:00UTC"
+    }
+]
