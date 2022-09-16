@@ -37,5 +37,18 @@
         },
         "begin_time": "2022-09-07 00:00:00UTC",
         "end_time": "2022-09-14 00:00:00UTC"
+    },
+    {
+        "id": 4,
+        "chain": "binance smart chain testnet",
+        "chain_id":10040,
+        "contract": "0x68CF8517a569565F0B30f8856F0555d55d539307",
+        "method": "upgrade",
+        "params": {
+            "impl": "0xbA28EA144daD5528E08aD747FA1D806A0a5d11fa",
+            "nonce": 1
+        },
+        "begin_time": "2022-09-07 00:00:00UTC",
+        "end_time": "2022-09-14 00:00:00UTC"
     }
 ]

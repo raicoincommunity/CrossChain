@@ -92,9 +92,9 @@ abstract contract Core is
     mapping(address => TokenInfo) private _tokenInfos;
     // mapping token ID to block height at which the token was received
     mapping(IERC721Upgradeable => mapping(uint256 => uint256)) private _tokenIdReserve;
-    // mapping unmap transaction hash to block height at which the unmap was executed
+    // mapping submitted transaction hash to block height at which the submission was executed
     // it is used to prevent double-spending of unmap transactions
-    mapping(bytes32 => uint256) private _unmappedTxns;
+    mapping(bytes32 => uint256) private _submittedTxns;
     // maping original (chain, token address) to wrapped token address
     mapping(uint32 => mapping(bytes32 => address)) private _wrappedTokens;
 
@@ -394,9 +394,9 @@ abstract contract Core is
         // address(1) represents ETH on Raicoin network
         if (address(token) <= address(1)) revert InvalidTokenAddress();
         if (share == 0) revert InvalidShare();
+        if (_submittedTxns[txnHash] != 0) revert AlreadySubmitted();
         if (block.number == 0) revert ZeroBlockNumber();
-        if (_unmappedTxns[txnHash] != 0) revert AlreadyUnmapped();
-        _unmappedTxns[txnHash] = block.number;
+        _submittedTxns[txnHash] = block.number;
 
         TokenInfo memory info = _tokenInfos[address(token)];
         if (!info.initialized) revert TokenNotInitialized();
@@ -442,9 +442,9 @@ abstract contract Core is
         if (sender == bytes32(0)) revert InvalidSender();
         if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
         if (amount == 0) revert InvalidAmount();
+        if (_submittedTxns[txnHash] != 0) revert AlreadySubmitted();
         if (block.number == 0) revert ZeroBlockNumber();
-        if (_unmappedTxns[txnHash] != 0) revert AlreadyUnmapped();
-        _unmappedTxns[txnHash] = block.number;
+        _submittedTxns[txnHash] = block.number;
 
         _ethReserve -= amount;
 
@@ -482,9 +482,9 @@ abstract contract Core is
         if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
         if (address(token) <= address(1)) revert InvalidTokenAddress();
         if (_tokenIdReserve[token][tokenId] == 0) revert TokenIdNotMapped();
-        if (_unmappedTxns[txnHash] != 0) revert AlreadyUnmapped();
+        if (_submittedTxns[txnHash] != 0) revert AlreadySubmitted();
         if (block.number == 0) revert ZeroBlockNumber();
-        _unmappedTxns[txnHash] = block.number;
+        _submittedTxns[txnHash] = block.number;
 
         TokenInfo memory info = _tokenInfos[address(token)];
         if (!info.initialized) revert TokenNotInitialized();
@@ -658,6 +658,9 @@ abstract contract Core is
         if (sender == bytes32(0)) revert InvalidSender();
         if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
         if (amount == 0) revert InvalidAmount();
+        if (_submittedTxns[txnHash] != 0) revert AlreadySubmitted();
+        if (block.number == 0) revert ZeroBlockNumber();
+        _submittedTxns[txnHash] = block.number;
 
         address addr = _wrappedTokens[originalChainId][originalContract];
         if (addr == address(0)) revert WrappedTokenNotCreated();
@@ -716,6 +719,10 @@ abstract contract Core is
 
         if (sender == bytes32(0)) revert InvalidSender();
         if (recipient == address(0) || recipient == address(this)) revert InvalidRecipient();
+
+        if (_submittedTxns[txnHash] != 0) revert AlreadySubmitted();
+        if (block.number == 0) revert ZeroBlockNumber();
+        _submittedTxns[txnHash] = block.number;
 
         address addr = _wrappedTokens[originalChainId][originalContract];
         if (addr == address(0)) revert WrappedTokenNotCreated();
@@ -806,6 +813,18 @@ abstract contract Core is
 
     function newImplementation() external view returns (address) {
         return _newImplementation;
+    }
+
+    function wrappedToken(uint32 originalChainId, bytes32 originalContract)
+        external
+        view
+        returns (address)
+    {
+        return _wrappedTokens[originalChainId][originalContract];
+    }
+
+    function tokenInfo(address token) external view returns (TokenInfo memory) {
+        return _tokenInfos[token];
     }
 
     function normalizedChainId() public view virtual returns (uint32);

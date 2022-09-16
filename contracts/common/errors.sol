@@ -22,7 +22,7 @@ error ZeroBlockNumber();
 error TokenIdAlreadyOwned();
 error TransferFailed();
 error InvalidSender();
-error AlreadyUnmapped();
+error AlreadySubmitted();
 error TokenNotInitialized();
 error CanNotUnmapWrappedToken();
 error TokenIdNotMapped();
