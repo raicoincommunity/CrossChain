@@ -8,7 +8,7 @@ contract NonceManager {
 
     modifier useNonce(uint256 nonce) {
         if (nonce != _nonce) revert NonceMismatch();
-        nonce++;
+        _nonce++;
         _;
     }
 
