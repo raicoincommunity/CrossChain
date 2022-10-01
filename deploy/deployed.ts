@@ -39,7 +39,7 @@ export const BSC_TEST_CONTRACTS: DeployedContracts = {
 }
 
 export const GOERLI_CONTRACTS: DeployedContracts = {
-  validatorManager: '0x7DeeFB52862680C0eA9680C676697c2B11951516',
+  validatorManager: '0x770f53F87c417eEA44a8f1314A22962F40Be9cd4',
   rai20Factory: '0x8E58F54073e02f4446653469C7fEE7e058a32Bbb',
   rai721Factory: '0x9048388ceDf0754A5D1Eb8a401Ad06d8fbAd0907',
   core: '0xfC113A7B68074642cA2FC74733A9BF325C045F14',

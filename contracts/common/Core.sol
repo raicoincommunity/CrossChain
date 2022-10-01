@@ -770,7 +770,7 @@ abstract contract Core is
         emit ERC20TokenUnwrapped(
             IRAI20(address(token)).originalChainId(),
             IRAI20(address(token)).originalContract(),
-            address(this),
+            _msgSender(),
             recipient,
             address(token),
             amount,
@@ -799,7 +799,7 @@ abstract contract Core is
         emit ERC721TokenUnwrapped(
             IRAI721(address(token)).originalChainId(),
             IRAI721(address(token)).originalContract(),
-            address(this),
+            _msgSender(),
             recipient,
             address(token),
             tokenId,
