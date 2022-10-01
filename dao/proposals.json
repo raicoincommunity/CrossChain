@@ -50,5 +50,44 @@
         },
         "begin_time": "2022-09-07 00:00:00UTC",
         "end_time": "2022-09-14 00:00:00UTC"
+    },
+    {
+        "id": 5,
+        "chain": "ethereum goerli testnet",
+        "chain_id":10033,
+        "contract": "0xfC113A7B68074642cA2FC74733A9BF325C045F14",
+        "method": "upgrade",
+        "params": {
+            "impl": "0xf9827f090c129B944d08aac4d1031bB265A1Fa53",
+            "nonce": 0
+        },
+        "begin_time": "2022-09-19 00:00:00UTC",
+        "end_time": "2022-09-20 00:00:00UTC"
+    },
+    {
+        "id": 6,
+        "chain": "binance smart chain testnet",
+        "chain_id":10040,
+        "contract": "0x68CF8517a569565F0B30f8856F0555d55d539307",
+        "method": "upgrade",
+        "params": {
+            "impl": "0x8a9056C1490482Fd7EBF2949833676646e1b04fF",
+            "nonce": 2
+        },
+        "begin_time": "2022-09-30 00:00:00UTC",
+        "end_time": "2022-10-01 00:00:00UTC"
+    },
+    {
+        "id": 7,
+        "chain": "ethereum goerli testnet",
+        "chain_id":10033,
+        "contract": "0xfC113A7B68074642cA2FC74733A9BF325C045F14",
+        "method": "upgrade",
+        "params": {
+            "impl": "0xE06DE8994a8ACfA04f4dE6ebb87df15d11F94f28",
+            "nonce": 0
+        },
+        "begin_time": "2022-09-30 00:00:00UTC",
+        "end_time": "2022-10-01 00:00:00UTC"
     }
 ]
