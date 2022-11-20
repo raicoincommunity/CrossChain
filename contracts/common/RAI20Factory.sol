@@ -2,28 +2,41 @@
 pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
 import "./Component.sol";
 import "./errors.sol";
 
-contract RAI20 is ERC20 {
-    uint8 private immutable _decimals;
-    uint32 private immutable _originalChainId;
-    bytes32 private immutable _originalContract;
-    address private immutable _coreContract;
+contract RAI20 is ERC20, Initializable {
+    uint8 private _decimals;
+    uint32 private _originalChainId;
+    bytes32 private _originalContract;
+    address private _coreContract;
 
     string private _originalChain;
     string private _name;
     string private _symbol;
 
     constructor() ERC20("", "") {
-        RAI20Factory.Parameters memory p = RAI20Factory(_msgSender()).parameters();
-        _name = p.name;
-        _symbol = p.symbol;
-        _originalChain = p.originalChain;
-        _originalChainId = p.originalChainId;
-        _originalContract = p.originalContract;
-        _coreContract = p.coreContract;
-        _decimals = p.decimals;
+        _disableInitializers();
+    }
+
+    function initialize(
+        string calldata name_,
+        string calldata symbol_,
+        string calldata originalChain_,
+        uint32 originalChainId_,
+        bytes32 originalContract_,
+        uint8 decimals_,
+        address coreContract_
+    ) external initializer {
+        _name = name_;
+        _symbol = symbol_;
+        _originalChain = originalChain_;
+        _originalChainId = originalChainId_;
+        _originalContract = originalContract_;
+        _decimals = decimals_;
+        _coreContract = coreContract_;
     }
 
     modifier onlyCoreContract() {
@@ -69,19 +82,13 @@ contract RAI20 is ERC20 {
 }
 
 contract RAI20Factory is Component {
-    struct Parameters {
-        string name;
-        string symbol;
-        string originalChain;
-        uint32 originalChainId;
-        bytes32 originalContract;
-        uint8 decimals;
-        address coreContract;
-    }
-
-    Parameters private _parameters;
+    address private immutable _implementation;
 
     event TokenCreated(address);
+
+    constructor() {
+        _implementation = address(new RAI20());
+    }
 
     function create(
         string calldata name,
@@ -91,24 +98,22 @@ contract RAI20Factory is Component {
         bytes32 originalContract,
         uint8 decimals
     ) external onlyCoreContract returns (address addr) {
-        _parameters = Parameters({
-            name: name,
-            symbol: symbol,
-            originalChain: originalChain,
-            originalChainId: originalChainId,
-            originalContract: originalContract,
-            decimals: decimals,
-            coreContract: coreContract()
-        });
-        addr = address(new RAI20{salt: calcSalt(originalChainId, originalContract)}());
+        addr = Clones.cloneDeterministic(
+            _implementation,
+            calcSalt(originalChainId, originalContract)
+        );
         if (addr == address(0)) revert CreateWrappedTokenFailed();
-        delete _parameters;
+        RAI20(addr).initialize(
+            name,
+            symbol,
+            originalChain,
+            originalChainId,
+            originalContract,
+            decimals,
+            coreContract()
+        );
         emit TokenCreated(addr);
         return addr;
-    }
-
-    function parameters() external view returns (Parameters memory) {
-        return _parameters;
     }
 
     function calcSalt(uint32 originalChainId, bytes32 originalContract)
@@ -117,33 +122,5 @@ contract RAI20Factory is Component {
         returns (bytes32)
     {
         return keccak256(abi.encode(originalChainId, originalContract));
-    }
-}
-
-contract RAI20FactoryHelper {
-    //solhint-disable-next-line var-name-mixedcase
-    bytes32 public immutable TOKEN_INIT_CODE_HASH =
-        keccak256(abi.encodePacked(type(RAI20).creationCode));
-
-    function calcAddress(
-        address factory,
-        uint32 originalChainId,
-        bytes32 originalContract
-    ) public view returns (address) {
-        return
-            address(
-                uint160(
-                    uint256(
-                        keccak256(
-                            abi.encodePacked(
-                                hex"ff",
-                                factory,
-                                keccak256(abi.encode(originalChainId, originalContract)),
-                                TOKEN_INIT_CODE_HASH
-                            )
-                        )
-                    )
-                )
-            );
     }
 }

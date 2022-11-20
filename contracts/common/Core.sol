@@ -55,6 +55,8 @@ abstract contract Core is
     /*=========================== 2. CONSTANTS ===============================*/
     bytes32 private constant _UPGRADE_TYPEHASH =
         keccak256("Upgrade(address newImplementation,uint256 nonce)");
+    bytes32 private constant _UPDATE_TOKEN_VOLATILE_TYPEHASH =
+        keccak256("UpdateTokenVolatile(address token,bool volatile,uint256 nonce)");
     bytes32 private constant _UNMAP_ERC20_TYPEHASH =
         keccak256(
             "UnmapERC20(address token,bytes32 sender,address recipient,bytes32 txnHash,uint64 txnHeight,uint256 share)"
@@ -100,6 +102,7 @@ abstract contract Core is
 
     /*=========================== 4. EVENTS ==================================*/
     event NewImplementationSet(address newImplementation);
+    event TokenVolatileUpdated(address token, bool volatile);
     event TokenInfoInitialized(
         address indexed token,
         TokenType tokenType,
@@ -240,7 +243,6 @@ abstract contract Core is
         IRAI20Factory rai20Factory,
         IRAI721Factory rai721Factory
     ) internal onlyInitializing {
-        // todo: unchain_init
         __ReentrancyGuard_init();
         __Pausable_init();
         __UUPSUpgradeable_init();
@@ -256,20 +258,40 @@ abstract contract Core is
     {
         _rai20Factory = rai20Factory;
         _rai721Factory = rai721Factory;
-        // todo:
     }
 
     function upgrade(
         address impl,
         uint256 nonce,
         bytes calldata signatures
-    ) external nonReentrant whenNotPaused useNonce(nonce) {
+    ) external whenNotPaused useNonce(nonce) {
         bytes32 structHash = keccak256(abi.encode(_UPGRADE_TYPEHASH, impl, nonce));
         if (!verify(structHash, signatures)) revert VerificationFailed();
         if (impl == address(0) || impl == _getImplementation()) revert InvalidImplementation();
 
         _newImplementation = impl;
         emit NewImplementationSet(impl);
+    }
+
+    function updateTokenVolatile(
+        address token,
+        bool volatile,
+        uint256 nonce,
+        bytes calldata signatures
+    ) external whenNotPaused useNonce(nonce) {
+        bytes32 structHash = keccak256(
+            abi.encode(_UPDATE_TOKEN_VOLATILE_TYPEHASH, token, volatile, nonce)
+        );
+        if (!verify(structHash, signatures)) revert VerificationFailed();
+
+        TokenInfo memory info = _tokenInfos[token];
+        if (!info.initialized) revert TokenNotInitialized();
+        if (info.tokenType != TokenType.ERC20) revert TokenTypeNotMatch();
+        if (info.wrapped) revert CanNotUpdateWrappedToken();
+        info.volatile = volatile;
+        _checkReserve(info, volatile);
+        _tokenInfos[token] = info;
+        emit TokenVolatileUpdated(token, volatile);
     }
 
     /**
@@ -299,17 +321,17 @@ abstract contract Core is
         uint256 newBalance = token.balanceOf(address(this));
         if (newBalance <= balance + 1) revert InvalidBalance();
 
-        if (info.reserve == 0 && balance > 0) {
-            info.reserve = balance;
-        }
         uint256 share = newBalance - balance;
-        if ((balance > 0 && info.reserve > 0) && (balance < info.reserve || info.volatile)) {
+        bool volatile = balance < info.reserve || info.volatile;
+        if ((balance != 0 && info.reserve != 0) && volatile) {
             share = (share * info.reserve) / balance;
         }
         if (share == 0) revert InvalidShare();
 
         info.reserve += share;
+        _checkReserve(info, volatile);
         _tokenInfos[address(token)] = info;
+
         emit ERC20TokenMapped(
             address(token),
             _msgSender(),
@@ -405,12 +427,14 @@ abstract contract Core is
 
         uint256 amount = share;
         uint256 balance = token.balanceOf(address(this));
-        if (balance < info.reserve || info.volatile) {
+        bool volatile = balance < info.reserve || info.volatile;
+        if (volatile) {
             amount = (share * balance) / info.reserve;
         }
         if (amount == 0) revert InvalidAmount();
 
         info.reserve -= share;
+        _checkReserve(info, volatile);
         _tokenInfos[address(token)] = info;
         token.safeTransfer(recipient, amount);
         emit ERC20TokenUnmapped(
@@ -635,7 +659,7 @@ abstract contract Core is
         uint64 txnHeight,
         uint256 amount,
         bytes calldata signatures
-    ) external payable chargeFee(msg.value) {
+    ) external payable nonReentrant whenNotPaused chargeFee(msg.value) {
         {
             bytes32 structHash = keccak256(
                 abi.encode(
@@ -696,7 +720,7 @@ abstract contract Core is
         uint64 txnHeight,
         uint256 tokenId,
         bytes calldata signatures
-    ) external payable chargeFee(msg.value) {
+    ) external payable nonReentrant whenNotPaused chargeFee(msg.value) {
         {
             bytes32 structHash = keccak256(
                 abi.encode(
@@ -752,7 +776,7 @@ abstract contract Core is
         IERC20Upgradeable token,
         uint256 amount,
         bytes32 recipient
-    ) external payable chargeFee(msg.value) {
+    ) external payable nonReentrant whenNotPaused chargeFee(msg.value) {
         if (address(token) == address(0)) revert InvalidTokenAddress();
         if (recipient == bytes32(0)) revert InvalidRecipient();
         if (amount == 0) revert InvalidAmount();
@@ -782,7 +806,7 @@ abstract contract Core is
         IERC721Upgradeable token,
         uint256 tokenId,
         bytes32 recipient
-    ) external payable chargeFee(msg.value) {
+    ) external payable nonReentrant whenNotPaused chargeFee(msg.value) {
         if (address(token) == address(0)) revert InvalidTokenAddress();
         if (recipient == bytes32(0)) revert InvalidRecipient();
 
@@ -827,11 +851,21 @@ abstract contract Core is
         return _tokenInfos[token];
     }
 
+    function ethReserve() external view returns (uint256) {
+        return _ethReserve;
+    }
+
     function normalizedChainId() public view virtual returns (uint32);
 
     function _authorizeUpgrade(address impl) internal virtual override {
         if (impl == address(0) || impl != _newImplementation) revert InvalidImplementation();
         _newImplementation = address(0);
+    }
+
+    function _checkReserve(TokenInfo memory info, bool volatile) private pure {
+        if (!volatile || info.reserve == 0 || info.decimals <= 2) return;
+        uint256 minReserve = 10 ** (info.decimals >> 1);
+        if (info.reserve < minReserve) revert ReserveUnsafe();
     }
 
     function _initERC20(

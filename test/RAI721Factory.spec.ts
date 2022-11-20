@@ -71,7 +71,7 @@ describe("RAI721Factory", function () {
         it("Should create a new RAI721 token", async function () {
             const tx = await factoryInstance.connect(core).create("", "", "Ethereum", 2, "0x00000000000000000000000057f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
             const receipt = await tx.wait();
-            const tokenAddr = abiCoder.decode(["address"], receipt.logs![0].data!)[0];
+            const tokenAddr = abiCoder.decode(["address"], receipt.logs![1].data!)[0];
 
             token = await ethers.getContractAt("RAI721", tokenAddr);
             expect(await token.name()).to.equal("");
@@ -101,7 +101,7 @@ describe("RAI721Factory", function () {
         it("Should create a new RAI721 token", async function () {
             const tx = await factoryInstance.connect(core).create("Ethereum Name Service", "rENS_eth", "Ethereum", 2, "0x00000000000000000000000057f1887a8bf19b14fc0df6fd9b2acc9af147ea85");
             const receipt = await tx.wait();
-            const tokenAddr = abiCoder.decode(["address"], receipt.logs![0].data!)[0];
+            const tokenAddr = abiCoder.decode(["address"], receipt.logs![1].data!)[0];
             token = await ethers.getContractAt("RAI721", tokenAddr);
         });
 
@@ -146,7 +146,7 @@ describe("RAI721Factory", function () {
 
         it("Should revert if burn token not existing", async function () {
             const tx = token.connect(core).burn(1000);
-            await expect(tx).to.be.revertedWith("ERC721: owner query for nonexistent token");
+            await expect(tx).to.be.revertedWith("ERC721: invalid token ID");
         });
     });
 

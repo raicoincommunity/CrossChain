@@ -3,26 +3,39 @@ pragma solidity ^0.8.14;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/proxy/Clones.sol";
+
 import "./Component.sol";
 import "./errors.sol";
 
-contract RAI721 is ERC721, ERC721Enumerable {
-    uint32 private immutable _originalChainId;
-    bytes32 private immutable _originalContract;
-    address private immutable _coreContract;
+contract RAI721 is ERC721, ERC721Enumerable, Initializable {
+    uint32 private _originalChainId;
+    bytes32 private _originalContract;
+    address private _coreContract;
 
     string private _originalChain;
     string private _name;
     string private _symbol;
 
     constructor() ERC721("", "") {
-        RAI721Factory.Parameters memory p = RAI721Factory(_msgSender()).parameters();
-        _name = p.name;
-        _symbol = p.symbol;
-        _originalChain = p.originalChain;
-        _originalChainId = p.originalChainId;
-        _originalContract = p.originalContract;
-        _coreContract = p.coreContract;
+        _disableInitializers();
+    }
+
+    function initialize(
+        string calldata name_,
+        string calldata symbol_,
+        string calldata originalChain_,
+        uint32 originalChainId_,
+        bytes32 originalContract_,
+        address coreContract_
+    ) external initializer {
+        _name = name_;
+        _symbol = symbol_;
+        _originalChain = originalChain_;
+        _originalChainId = originalChainId_;
+        _originalContract = originalContract_;
+        _coreContract = coreContract_;
     }
 
     modifier onlyCoreContract() {
@@ -67,9 +80,10 @@ contract RAI721 is ERC721, ERC721Enumerable {
     function _beforeTokenTransfer(
         address from,
         address to,
-        uint256 tokenId
+        uint256 tokenId,
+        uint256 batchSize
     ) internal override(ERC721, ERC721Enumerable) {
-        super._beforeTokenTransfer(from, to, tokenId);
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
     }
 
     function supportsInterface(bytes4 interfaceId)
@@ -83,18 +97,13 @@ contract RAI721 is ERC721, ERC721Enumerable {
 }
 
 contract RAI721Factory is Component {
-    struct Parameters {
-        string name;
-        string symbol;
-        string originalChain;
-        uint32 originalChainId;
-        bytes32 originalContract;
-        address coreContract;
-    }
+    address private immutable _implementation;
 
     event TokenCreated(address);
 
-    Parameters private _parameters;
+    constructor() {
+        _implementation = address(new RAI721());
+    }
 
     function create(
         string calldata name,
@@ -103,23 +112,25 @@ contract RAI721Factory is Component {
         uint32 originalChainId,
         bytes32 originalContract
     ) external onlyCoreContract returns (address addr) {
-        _parameters = Parameters({
-            name: name,
-            symbol: symbol,
-            originalChain: originalChain,
-            originalChainId: originalChainId,
-            originalContract: originalContract,
-            coreContract: coreContract()
-        });
-        addr = address(new RAI721{salt: calcSalt(originalChainId, originalContract)}());
+        addr = Clones.cloneDeterministic(
+            _implementation,
+            calcSalt(originalChainId, originalContract)
+        );
         if (addr == address(0)) revert CreateWrappedTokenFailed();
-        delete _parameters;
+        RAI721(addr).initialize(
+            name,
+            symbol,
+            originalChain,
+            originalChainId,
+            originalContract,
+            coreContract()
+        );
         emit TokenCreated(addr);
         return addr;
     }
 
-    function parameters() external view returns (Parameters memory) {
-        return _parameters;
+    function implementation() external view returns (address) {
+        return _implementation;
     }
 
     function calcSalt(uint32 originalChainId, bytes32 originalContract)
@@ -128,33 +139,5 @@ contract RAI721Factory is Component {
         returns (bytes32)
     {
         return keccak256(abi.encode(originalChainId, originalContract));
-    }
-}
-
-contract RAI721FactoryHelper {
-    //solhint-disable-next-line var-name-mixedcase
-    bytes32 public immutable TOKEN_INIT_CODE_HASH =
-        keccak256(abi.encodePacked(type(RAI721).creationCode));
-
-    function calcAddress(
-        address factory,
-        uint32 originalChainId,
-        bytes32 originalContract
-    ) public view returns (address) {
-        return
-            address(
-                uint160(
-                    uint256(
-                        keccak256(
-                            abi.encodePacked(
-                                hex"ff",
-                                factory,
-                                keccak256(abi.encode(originalChainId, originalContract)),
-                                TOKEN_INIT_CODE_HASH
-                            )
-                        )
-                    )
-                )
-            );
     }
 }

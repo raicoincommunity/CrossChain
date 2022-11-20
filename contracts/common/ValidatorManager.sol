@@ -141,7 +141,7 @@ contract ValidatorManager is ReentrancyGuard, Pausable, CustomEIP712, NonceManag
         info.epoch = epoch;
         _doSubmission(validator, info, weight);
 
-        if (weightClear > 0 && rewardTo != address(0)) {
+        if (weightClear != 0 && rewardTo != address(0)) {
             _sendReward(rewardTo, weightClear, totalWeight);
         }
     }
@@ -155,15 +155,18 @@ contract ValidatorManager is ReentrancyGuard, Pausable, CustomEIP712, NonceManag
         if (!_inPurgeTimeRange()) revert NotInPurgeTimeRange();
         uint256 totalWeight = _totalWeight;
         uint256 weight = 0;
-        for (uint256 i = 0; i < validators.length; i++) {
+        for (uint256 i = 0; i < validators.length; ) {
             bytes32 validator = validators[i];
             ValidatorInfo memory info = _validatorInfos[validator];
             if (_canPurge(info)) {
                 weight += _revokeSubmission(validator, info, true);
             }
+            unchecked {
+                ++i;
+            }
         }
 
-        if (weight > 0 && rewardTo != address(0)) {
+        if (weight != 0 && rewardTo != address(0)) {
             _sendReward(rewardTo, weight, totalWeight);
         }
     }
@@ -205,7 +208,7 @@ contract ValidatorManager is ReentrancyGuard, Pausable, CustomEIP712, NonceManag
         if (end > length) end = length;
         if (begin >= end) return new ValidatorFullInfo[](0);
         ValidatorFullInfo[] memory result = new ValidatorFullInfo[](end - begin);
-        for ((uint256 i, uint256 j) = (begin, 0); i < end; (++i, ++j)) {
+        for ((uint256 i, uint256 j) = (begin, 0); i < end; ) {
             bytes32 validator = _validators[i];
             result[j].validator = validator;
             ValidatorInfo memory info = _validatorInfos[validator];
@@ -214,6 +217,10 @@ contract ValidatorManager is ReentrancyGuard, Pausable, CustomEIP712, NonceManag
             result[j].lastSubmit = info.lastSubmit;
             result[j].epoch = info.epoch;
             result[j].weight = _weights[info.signer];
+            unchecked {
+                ++i;
+                ++j;
+            }
         }
         return result;
     }
@@ -248,13 +255,16 @@ contract ValidatorManager is ReentrancyGuard, Pausable, CustomEIP712, NonceManag
 
         uint256 weight = 0;
 
-        for (i = 0; i < count; ++i) {
+        for (i = 0; i < count; ) {
             (r, s, v) = _decodeSignature(signatures, i);
             current = ecrecover(typedHash, v, r, s);
             if (current == address(0)) revert EcrecoverFailed();
             if (current <= last) revert InvalidSignerOrder();
             last = current;
             weight += _getWeight(current, genesis, total);
+            unchecked {
+                ++i;
+            }
         }
 
         uint256 adjustTotal = total > _MIN_WEIGHT ? total : _MIN_WEIGHT;

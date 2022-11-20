@@ -73,7 +73,7 @@ describe("RAI20Factory", function () {
     it("Should create a new RAI20 token", async function () {
       const tx = await factoryInstance.connect(core).create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x0000000000000000000000002170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
       const receipt = await tx.wait();
-      const tokenAddr = abiCoder.decode(["address"], receipt.logs![0].data!)[0];
+      const tokenAddr = abiCoder.decode(["address"], receipt.logs![1].data!)[0];
 
       token = await ethers.getContractAt("RAI20", tokenAddr);
       expect(await token.name()).to.equal("Ethereum Token");
@@ -104,7 +104,7 @@ describe("RAI20Factory", function () {
     it("Should create a new RAI20 token", async function () {
       const tx = await factoryInstance.connect(core).create("Ethereum Token", "rETH_bsc", "Binance Smart Chain", 2, "0x0000000000000000000000002170Ed0880ac9A755fd29B2688956BD959F933F8", 18);
       const receipt = await tx.wait();
-      const tokenAddr = abiCoder.decode(["address"], receipt.logs![0].data!)[0];
+      const tokenAddr = abiCoder.decode(["address"], receipt.logs![1].data!)[0];
       token = await ethers.getContractAt("RAI20", tokenAddr);
     });
 
