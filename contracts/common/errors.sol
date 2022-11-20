@@ -50,3 +50,5 @@ error NotCalledByValidatorManager();
 error FeeTooLow();
 error SendRewardFailed();
 error ChainIdMismatch();
+error CanNotUpdateWrappedToken();
+error ReserveUnsafe();

@@ -23,7 +23,7 @@ abstract contract Verifier is Initializable, CustomEIP712Upgradeable {
 
     modifier chargeFee(uint256 fee) {
         if (fee < _fee) revert FeeTooLow();
-        if (fee > 0) {
+        if (fee != 0) {
             _totalFee += fee;
             emit FeeCharged(msg.sender, fee);
         }
@@ -73,4 +73,15 @@ abstract contract Verifier is Initializable, CustomEIP712Upgradeable {
         bytes32 typedHash = _hashTypedDataV4(structHash);
         return _validatorManager.verifyTypedData(typedHash, signatures);
     }
+
+    function getTotalFee() external view returns (uint256) {
+        return _totalFee;
+    }
+
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+     */
+    uint256[50] private __gap;
 }
